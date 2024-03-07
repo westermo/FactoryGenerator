@@ -11,6 +11,12 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FactoryGenerator.Attributes
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "FactoryGenerator", "FactoryGenerator\FactoryGenerator.csproj", "{4DF43882-595D-4141-B735-54CC7014AFCA}"
 EndProject
+Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "TestData", "TestData", "{F223C5B3-D0FA-4C19-A9C6-7A4894B63885}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inherited", "Tests\TestData\Inherited\Inherited.csproj", "{561385B3-9A1A-43DE-AC19-F2952E04C25E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Inheritor", "Tests\TestData\Inheritor\Inheritor.csproj", "{AE848B3F-AC24-4C2E-AEE7-F9DE244FAB08}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -29,12 +35,23 @@ Global
 		{4DF43882-595D-4141-B735-54CC7014AFCA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{4DF43882-595D-4141-B735-54CC7014AFCA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{4DF43882-595D-4141-B735-54CC7014AFCA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{561385B3-9A1A-43DE-AC19-F2952E04C25E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{561385B3-9A1A-43DE-AC19-F2952E04C25E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{561385B3-9A1A-43DE-AC19-F2952E04C25E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{561385B3-9A1A-43DE-AC19-F2952E04C25E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{AE848B3F-AC24-4C2E-AEE7-F9DE244FAB08}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{AE848B3F-AC24-4C2E-AEE7-F9DE244FAB08}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{AE848B3F-AC24-4C2E-AEE7-F9DE244FAB08}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{AE848B3F-AC24-4C2E-AEE7-F9DE244FAB08}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
 	EndGlobalSection
 	GlobalSection(NestedProjects) = preSolution
 		{8CE0F9C5-3388-4893-A50E-0C326E63EDBC} = {AD098DD9-3A5E-4B58-8555-0A4EB2C42159}
+		{F223C5B3-D0FA-4C19-A9C6-7A4894B63885} = {AD098DD9-3A5E-4B58-8555-0A4EB2C42159}
+		{561385B3-9A1A-43DE-AC19-F2952E04C25E} = {F223C5B3-D0FA-4C19-A9C6-7A4894B63885}
+		{AE848B3F-AC24-4C2E-AEE7-F9DE244FAB08} = {F223C5B3-D0FA-4C19-A9C6-7A4894B63885}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {F78CCB40-2529-4F55-8EFA-EDB292F9BC67}

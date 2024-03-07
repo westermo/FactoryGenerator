@@ -10,9 +10,8 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.CodeAnalysis.Common"/>
         <PackageReference Include="Microsoft.NET.Test.Sdk"/>
-        <PackageReference Include="Shouldly" />
+        <PackageReference Include="Shouldly"/>
         <PackageReference Include="xunit.extensibility.core"/>
         <PackageReference Include="xunit.runner.visualstudio">
             <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
@@ -21,14 +20,8 @@
         <PackageReference Include="JunitXml.TestLogger"/>
         <PackageReference Include="coverlet.collector"/>
     </ItemGroup>
-    <ItemGroup>
-        <Content Include="..\..\FactoryGenerator.Attributes\InjectAttribute.cs">
-            <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-            <TargetPath>InjectAttribute.cs</TargetPath>
-        </Content>
-    </ItemGroup>
-    <ItemGroup>
-        <ProjectReference Include="..\..\FactoryGenerator\FactoryGenerator.csproj"/>
-    </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="..\TestData\Inheritor\Inheritor.csproj"/>
+    </ItemGroup>
 </Project>
