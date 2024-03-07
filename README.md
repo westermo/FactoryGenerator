@@ -30,10 +30,10 @@ For an example regarding which projects are best server by which package, see th
 
 ```mermaid
   graph TD;
-      App[Main()]-->Dependency A[ClassLib];
-      App[Main()]-->Dependency B[ClassLib];
-      Dependency B[ClassLib]-->Dependency C[ClassLib];
-      Dependency A[ClassLib]-->Dependency C[ClassLib];
+      App-->Dependency A;
+      App-->Dependency B;
+      Dependency B-->Dependency C;
+      Dependency A-->Dependency C;
 ```
 
 In the above graph, the reccomended action would be to add a reference to **FactoryGenerator.Attributes** to _Dependency C_ as that will in turn allow _Dependency A_ and _Dependency B_ to reference
