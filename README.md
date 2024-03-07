@@ -1,5 +1,5 @@
 [![Nuget](https://img.shields.io/nuget/v/FactoryGenerator?style=flat-square)](https://www.nuget.org/packages/FactoryGenerator/)
-[![Build](https://img.shields.io/github/actions/workflow/status/westermo/FactoryGenerator/build.yml?branch=develop&style=flat-square)](https://github.com/westermo/FactoryGenerator/actions)
+[![Build](https://img.shields.io/github/actions/workflow/status/westermo/FactoryGenerator/build.yml?branch=main&style=flat-square)](https://github.com/westermo/FactoryGenerator/actions)
 [![License](https://img.shields.io/github/license/westermo/FactoryGenerator?style=flat-square)](https://github.com/westermo/FactoryGenerator/blob/develop/LICENSE)
 
 FactoryGenerator is an IoC container that uses [Roslyn](https://github.com/dotnet/roslyn) to prepare a container for consumption at compile-time. Inspired by, but having little in common
