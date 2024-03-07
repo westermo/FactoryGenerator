@@ -1,4 +1,5 @@
 using Inherited;
+using Inheritor;
 using Shouldly;
 using Inheritor.Generated;
 using Type = Inherited.Type;
@@ -114,6 +115,18 @@ public class InjectionDetectionTests()
     [Fact]
     public void InheritorsOverride()
     {
-        m_container.Resolve<IOverridable>().ShouldBeOfType<Inheritor.Overrider>();
+        m_container.Resolve<IOverridable>().ShouldBeOfType<Overrider>();
+    }
+
+    [Fact]
+    public void ArrayExpressionsCollect()
+    {
+        m_container.Resolve<ArrayConsumer>().Arrays.Count().ShouldBe(3);
+    }
+
+    [Fact]
+    public void RequestedArraysArePresent()
+    {
+        Program.Method().Count().ShouldBe(3);
     }
 }

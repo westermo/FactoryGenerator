@@ -82,3 +82,31 @@ public class Sub : ISub;
 
 [Inject, InheritInterfaces]
 public class Inheritor : Sub;
+
+public interface IArray;
+
+[Inject]
+public class Array1 : IArray;
+
+[Inject]
+public class Array2 : IArray;
+
+[Inject]
+public class Array3 : IArray;
+
+[Inject, Self]
+public class ArrayConsumer(IEnumerable<IArray> arrays)
+{
+    public IEnumerable<IArray> Arrays { get; } = arrays;
+}
+
+public interface IRequestedArray;
+
+[Inject]
+public class RequestedArray1 : IRequestedArray;
+
+[Inject]
+public class RequestedArray2 : IRequestedArray;
+
+[Inject]
+public class RequestedArray3 : IRequestedArray;

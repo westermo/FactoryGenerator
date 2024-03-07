@@ -19,25 +19,7 @@ namespace FactoryGenerator
         public string Declaration(ImmutableArray<INamedTypeSymbol> availableParameters)
         {
             var creationCall = CreationCall(availableParameters);
-            if (Singleton)
-            {
-                return $@"
-    private {Type} {Name}
-    {{
-        if ({LazyName} != null)
-            return {LazyName};
-    
-        lock (m_lock)
-        {{
-            if ({LazyName} != null)
-                return {LazyName};
-            return {LazyName} = {creationCall};
-        }}
-    }} 
-    private {Type}? {LazyName};";
-            }
-
-            return $"private {Type} {Name} => {creationCall};";
+            return Singleton ? SymbolUtility.SingletonFactory(Type, Name, LazyName, creationCall) : $"private {Type} {Name} => {creationCall};";
         }
 
         private string CreationCall(ImmutableArray<INamedTypeSymbol> availableParameters)
@@ -198,12 +180,14 @@ namespace FactoryGenerator
                         {
                             attributedInterfaces.Add(addedNamed);
                         }
+
                         break;
                     case "ExceptAsAttribute":
                         if (attributeData.AttributeClass!.TypeArguments[0] is INamedTypeSymbol removedNamed)
                         {
                             preventedInterfaces.Add(removedNamed);
                         }
+
                         break;
                     case "SelfAttribute":
                         attributedInterfaces.Add(namedTypeSymbol);

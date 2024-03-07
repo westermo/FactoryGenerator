@@ -46,5 +46,23 @@ namespace FactoryGenerator
                              .Replace(',', '_')
                              .Replace(" ", "") + "()";
         }
+
+        public static string SingletonFactory(INamedTypeSymbol type, string name, string lazyName, string creation)
+        {
+            return $@"
+    private {type} {name}
+    {{
+        if ({lazyName} != null)
+            return {lazyName};
+    
+        lock (m_lock)
+        {{
+            if ({lazyName} != null)
+                return {lazyName};
+            return {lazyName} = {creation};
+        }}
+    }} 
+    private {type}? {lazyName};";
+        }
     }
 }

@@ -332,10 +332,43 @@ public partial class DependencyInjectionContainer
             }
 
             var functor = function ? "()" : "";
-            declarations[name] = $@"
-    private {type}[]? m_{name}; 
-    private {type}[] {name}{functor} => m_{name} ??= {factoryName};
-{factory}";
+            if (function)
+            {
+                declarations[name] = $@"
+    private {type}[] {name}()
+    {{
+        if (m_{name} != null)
+            return m_{name};
+    
+        lock (m_lock)
+        {{
+            if (m_{name} != null)
+                return m_{name};
+            return m_{name} = {factoryName};
+        }}
+    }} 
+    private {type}[]? m_{name};" + factory;
+            }
+            else
+            {
+                declarations[name] = $@"
+    private {type}[] {name}
+    {{
+        get
+        {{
+            if (m_{name} != null)
+                return m_{name};
+        
+            lock (m_lock)
+            {{
+                if (m_{name} != null)
+                    return m_{name};
+                return m_{name} = {factoryName};
+            }}
+        }}
+    }} 
+    private {type}[]? m_{name};" + factory;
+            }
         }
 
         private static string MakeDictionary(IEnumerable<INamedTypeSymbol> types)
