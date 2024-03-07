@@ -253,7 +253,7 @@ public partial class DependencyInjectionContainer : IContainer
             {
                 if (parameter.Type.Name.Contains("IContainer"))
                 {
-                    declarations[parameter.Name] = $"private ILifetimeScope {parameter.Name} => this;";
+                    declarations[parameter.Name] = $"private IContainer {parameter.Name} => this;";
                     constructorParameters.Remove(parameter);
                 }
             }
