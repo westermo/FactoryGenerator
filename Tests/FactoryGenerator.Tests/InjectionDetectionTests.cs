@@ -1,10 +1,10 @@
 using Inherited;
 using Inheritor;
-using Shouldly;
 using Inheritor.Generated;
+using Shouldly;
 using Type = Inherited.Type;
 
-namespace WeConfig.AutofacGenerator.Tests;
+namespace FactoryGenerator.Tests;
 
 public class InjectionDetectionTests()
 {

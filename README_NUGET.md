@@ -1,7 +1,3 @@
-[![Nuget](https://img.shields.io/nuget/v/factorygenerator?style=flat-square)](https://www.nuget.org/packages/factorygenerator/)
-[![Build](https://img.shields.io/github/actions/workflow/status/factorygenerator/factorygenerator/build.yml?branch=develop&style=flat-square)](https://github.com/factorygenerator/factorygenerator/actions)
-[![License](https://img.shields.io/github/license/factorygenerator/factorygenerator?style=flat-square)](https://github.com/factorygenerator/factorygenerator/blob/develop/LICENSE)
-
 FactoryGenerator is an IoC container that uses [Roslyn](https://github.com/dotnet/roslyn) to prepare a container for consumption at compile-time. Inspired by, but having little in common
 with [Autofac](https://autofac.org/) beyond syntax choices.
 
@@ -9,7 +5,8 @@ with [Autofac](https://autofac.org/) beyond syntax choices.
 
 - **Attribute-based Generation:** Simply decorate your code with attributes like ```[Inject]```,```[Singleton]```,```[Self]``` and more and your IoC container will be woven together.
 - **Test-Overridability:** Need to swap out one injection for another to test something? Simply ```[Inject]``` a replacement inside your test project for a new container.
-- 
+
+
 ## Documentation
 
 ### Usage

@@ -2,7 +2,7 @@
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
-        <RootNamespace>GenFac.Injectable</RootNamespace>
+        <RootNamespace>FactoryGenerator</RootNamespace>
     </PropertyGroup>
 
 </Project>
