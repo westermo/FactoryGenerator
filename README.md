@@ -1,6 +1,6 @@
 [![Nuget](https://img.shields.io/nuget/v/FactoryGenerator?style=flat-square)](https://www.nuget.org/packages/FactoryGenerator/)
-[![Build](https://img.shields.io/github/actions/workflow/status/FactoryGenerator/FactoryGenerator/build.yml?branch=develop&style=flat-square)](https://github.com/FactoryGenerator/FactoryGenerator/actions)
-[![License](https://img.shields.io/github/license/FactoryGenerator/FactoryGenerator?style=flat-square)](https://github.com/FactoryGenerator/FactoryGenerator/blob/develop/LICENSE)
+[![Build](https://img.shields.io/github/actions/workflow/status/westermo/FactoryGenerator/build.yml?branch=develop&style=flat-square)](https://github.com/westermo/FactoryGenerator/actions)
+[![License](https://img.shields.io/github/license/westermo/FactoryGenerator?style=flat-square)](https://github.com/westermo/FactoryGenerator/blob/develop/LICENSE)
 
 FactoryGenerator is an IoC container that uses [Roslyn](https://github.com/dotnet/roslyn) to prepare a container for consumption at compile-time. Inspired by, but having little in common
 with [Autofac](https://autofac.org/) beyond syntax choices.
@@ -30,10 +30,10 @@ For an example regarding which projects are best server by which package, see th
 
 ```mermaid
   graph TD;
-      App[Main()]-->Dependency A[ClassLib];
-      App[Main()]-->Dependency B[ClassLib];
-      Dependency B[ClassLib]-->Dependency C[ClassLib];
-      Dependency A[ClassLib]-->Dependency C[ClassLib];
+      App-->Dependency-A;
+      App-->Dependency-B;
+      Dependency-B-->Dependency-C;
+      Dependency-A-->Dependency-C;
 ```
 
 In the above graph, the reccomended action would be to add a reference to **FactoryGenerator.Attributes** to _Dependency C_ as that will in turn allow _Dependency A_ and _Dependency B_ to reference
