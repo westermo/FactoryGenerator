@@ -39,9 +39,6 @@ WeConfig.sln.ide/
 [Tt]est[Rr]esult*/
 [Bb]uild[Ll]og.*
 
-Vendors/Westermo/Documents/ReleaseNotes/verfile.tex
-Vendors/Westermo/Documents/ReleaseNotes/ReleaseNotes.pdf
-
 # OpenCover
 results.xml
 
