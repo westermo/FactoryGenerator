@@ -12,6 +12,7 @@
         <Company>Westermo Network Technologies AB</Company>
         <Copyright>Copyright © Westermo Network Technologies AB $(CurrentYear), and Alexander Smirnov (derivative work of https://github.com/panthernet/GraphX)</Copyright>
         <Authors>Westermo Network Technologies AB</Authors>
+        <PackageVersion>0.1.0</PackageVersion>
     </PropertyGroup>
 
     <ItemGroup>
