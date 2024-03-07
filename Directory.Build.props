@@ -3,8 +3,8 @@
         <EnablePackageValidation>true</EnablePackageValidation>
         <PackageLicenseExpression>MIT</PackageLicenseExpression>
         <PackageReadmeFile>README_NUGET.md</PackageReadmeFile>
-        <PackageProjectUrl>https://github.com/westermo/factorygenerator</PackageProjectUrl>
-        <RepositoryUrl>https://github.com/westermo/factorygenerator</RepositoryUrl>
+        <PackageProjectUrl>https://github.com/westermo/FactoryGenerator</PackageProjectUrl>
+        <RepositoryUrl>https://github.com/westermo/FactoryGenerator</RepositoryUrl>
         <RepositoryType>git</RepositoryType>
         <PackageIcon>icon.png</PackageIcon>
         <PackageTags>roslyn, ioc, dependency-injection, compile-time</PackageTags>
