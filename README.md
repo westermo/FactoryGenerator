@@ -141,3 +141,23 @@ public DependencyInjectionContainer(CommandLineOptions options)
 }
 ```
 And will thus require the user to provide the value at container-creation time.
+
+### Injecting Methods
+FactoryGenerator is not limited to only allowing for the injection of classes. Consider the following:
+```csharp
+using FactoryGenerator.Attributes;
+
+namespace Somewhere;
+public interface IResultType;
+public interface IProvider
+{
+  [Inject, Singleton]
+  IResultType Method();
+}
+[Inject]
+public class Provider : IProvider
+{
+  public IResultType Method() => /*Implementation Code*/
+}
+```
+With this code, it is now possible to do `container.Resolve<IResultType>()`, which will effectively return the result of `new Provider().Method()`, although, since `Method` is `[Inject]`ed as a `[Singleton]`, the result will be cached and the same instance will be returned at every call to `Resolve` as well as shared between all Injected implementations that require a `IResultType`.
