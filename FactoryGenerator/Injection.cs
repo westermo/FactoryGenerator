@@ -29,9 +29,17 @@ namespace FactoryGenerator
             switch (Lambda)
             {
                 case IMethodSymbol methodSymbol:
+                    if (!availableParameters.Contains(methodSymbol.ContainingType))
+                    {
+                        throw new Exception($"Could not find any [Inject]ed implementations of {methodSymbol.ContainingType} to use as the source for the injection of {methodSymbol.ContainingType}.{methodSymbol.Name}. Please provide at least one injection of the type {methodSymbol.ContainingType}.");
+                    }
                     creationCall = $"{SymbolUtility.MemberName(methodSymbol.ContainingType)}.{methodSymbol.Name}{MakeMethodCall(methodSymbol, missing)}";
                     break;
                 case IPropertySymbol parameterSymbol:
+                    if (!availableParameters.Contains(parameterSymbol.ContainingType))
+                    {
+                        throw new Exception($"Could not find any [Inject]ed implementations of {parameterSymbol.ContainingType} to use as the source for the injection of {parameterSymbol.ContainingType}.{parameterSymbol.Name}. Please provide at least one injection of the type {parameterSymbol.ContainingType}.");
+                    }
                     creationCall = $"{SymbolUtility.MemberName(parameterSymbol.ContainingType)}.{parameterSymbol.Name}";
                     break;
                 default:
@@ -136,24 +144,24 @@ namespace FactoryGenerator
             switch (symbol)
             {
                 case INamedTypeSymbol nts:
-                {
-                    namedTypeSymbol = nts;
-                    if (namedTypeSymbol.TypeKind == TypeKind.Interface) return null;
-                    if (namedTypeSymbol.IsAbstract) return null;
-                    break;
-                }
+                    {
+                        namedTypeSymbol = nts;
+                        if (namedTypeSymbol.TypeKind == TypeKind.Interface) return null;
+                        if (namedTypeSymbol.IsAbstract) return null;
+                        break;
+                    }
                 case IMethodSymbol methodSymbol:
-                {
-                    namedTypeSymbol = methodSymbol.ReturnType as INamedTypeSymbol;
-                    lambda = methodSymbol;
-                    break;
-                }
+                    {
+                        namedTypeSymbol = methodSymbol.ReturnType as INamedTypeSymbol;
+                        lambda = methodSymbol;
+                        break;
+                    }
                 case IPropertySymbol property:
-                {
-                    namedTypeSymbol = property.Type as INamedTypeSymbol;
-                    lambda = property;
-                    break;
-                }
+                    {
+                        namedTypeSymbol = property.Type as INamedTypeSymbol;
+                        lambda = property;
+                        break;
+                    }
             }
 
             if (namedTypeSymbol is null) return null;
