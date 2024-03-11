@@ -89,6 +89,8 @@ jobs:
           path: ${{ env.NuGetDirectory }}
       - name: Setup dotnet ${{ matrix.dotnet-version }}
         uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
       - name: Publish Nuget packages
         run: |
           for file in $(find "${{ env.NuGetDirectory }}" -type f -name "*.nupkg"); do
