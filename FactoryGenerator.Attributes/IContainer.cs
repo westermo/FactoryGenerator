@@ -1,9 +1,10 @@
 using System;
 using System.Diagnostics.CodeAnalysis;
+using System.Threading.Tasks;
 
 namespace FactoryGenerator;
 
-public interface IContainer
+public interface IContainer : IDisposable
 {
     T Resolve<T>();
     object Resolve(Type type);
@@ -38,4 +39,5 @@ public interface IContainer
     }
 
     bool IsRegistered(Type type) => TryResolve(type, out _);
+    bool IsRegistered<T>() => IsRegistered(typeof(T));
 }

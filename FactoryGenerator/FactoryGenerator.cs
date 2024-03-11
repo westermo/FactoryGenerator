@@ -155,9 +155,11 @@ public partial class DependencyInjectionContainer : IContainer
             var declarations = new Dictionary<string, string>();
             var availableInterfaces = interfaceInjectors.Keys.ToImmutableArray();
             var constructorParameters = new List<IParameterSymbol>();
+            var disposables = new List<Injection>();
 
             foreach (var injection in ordered)
             {
+                if (injection.Disposable && injection.Singleton) disposables.Add(injection);
                 declarations[injection.Name] = injection.Declaration(availableInterfaces);
                 HashSet<IParameterSymbol>? missing = null;
                 injection.GetBestConstructor(availableInterfaces, ref missing);
@@ -268,8 +270,12 @@ public partial class DependencyInjectionContainer : IContainer
                                                      allArguments.Select(arg => arg.Split(' ').Last()).Select(arg => $"this.{arg} = {arg};"));
             var dictSize = interfaceInjectors.Count + localizedParameters.Count + requested.Count +
                            constructorParameters.Count;
-            yield return Constructor(usingStatements, constructorFields, constructor, constructorAssignments, dictSize, interfaceInjectors, localizedParameters, requested, constructorParameters);
-            yield return Declarations(usingStatements, declarations);
+            yield return Constructor(usingStatements, constructorFields,
+                                     constructor, constructorAssignments,
+                                     dictSize, interfaceInjectors,
+                                     localizedParameters, requested,
+                                     constructorParameters);
+            yield return Declarations(usingStatements, declarations, disposables);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations);
         }
 
@@ -291,7 +297,8 @@ public partial class DependencyInjectionContainer
 {MakeDictionary(requested)}
 {MakeDictionary(constructorParameters)}
         }};
-    }}
+    }}    
+
 }}";
         }
 
@@ -304,12 +311,16 @@ public partial class DependencyInjectionContainer
 }}";
         }
 
-        private static string Declarations(string usingStatements, Dictionary<string, string> declarations)
+        private static string Declarations(string usingStatements, Dictionary<string, string> declarations, List<Injection> disposables)
         {
             return $@"{usingStatements}
 public partial class DependencyInjectionContainer
 {{
     {string.Join("\n\t", declarations.Values)}
+    public void Dispose()
+    {{
+        {string.Join("\n\t", disposables.Select(d => d.DisposeCall))}
+    }}
 }}";
         }
 
@@ -330,8 +341,6 @@ public partial class DependencyInjectionContainer
         return source;
     }}";
             }
-
-            var functor = function ? "()" : "";
             if (function)
             {
                 declarations[name] = $@"
