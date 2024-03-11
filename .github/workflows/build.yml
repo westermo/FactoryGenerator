@@ -43,15 +43,15 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - run: |
-          If (('${{ github.event_name }}' -eq 'release') -and ('${{ github.ref_name }}' -match '^(?<version>\d+\.\d+\.\d+)')) {
-            Add-Content -Path $Env:GITHUB_ENV -Value "VERSION=$($Matches.version)"
-            Add-Content -Path $Env:GITHUB_ENV -Value "FILE_VERSION=$($Matches.version).0"
-            Add-Content -Path $Env:GITHUB_ENV -Value "INFORMAL_VERSION=${{ github.ref_name }}"
-          } else {
-            Add-Content -Path $Env:GITHUB_ENV -Value "VERSION=0.0.0"
-            Add-Content -Path $Env:GITHUB_ENV -Value "FILE_VERSION=0.0.0.0"
-            Add-Content -Path $Env:GITHUB_ENV -Value "INFORMAL_VERSION=UNRELEASED"
-          }
+          if [[ "${{ github.event_name }}" == "release" && "${{ github.ref_name }}" =~ ^(?<version>\d+\.\d+\.\d+) ]]; then
+              echo "VERSION=${BASH_REMATCH[version]}" >> $GITHUB_ENV
+              echo "FILE_VERSION=${BASH_REMATCH[version]}.0" >> $GITHUB_ENV
+              echo "INFORMAL_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+          else
+              echo "VERSION=0.0.0" >> $GITHUB_ENV
+              echo "FILE_VERSION=0.0.0.0" >> $GITHUB_ENV
+              echo "INFORMAL_VERSION=UNRELEASED" >> $GITHUB_ENV
+          fi
         name: "Set package version meta data"
       - name: Pack Generator
         run: dotnet pack FactoryGenerator/FactoryGenerator.csproj -o "${{ env.NuGetDirectory }}"
