@@ -6,6 +6,9 @@ on:
   pull_request:
     branches:
       - "*"
+  release:
+    types:
+      - published
 
 env:
   DOTNET_SKIP_FIRST_TIME_EXPERIENCE: 1
