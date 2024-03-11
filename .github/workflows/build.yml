@@ -55,4 +55,23 @@ jobs:
           if-no-files-found: error
           retention-days: 1
           path: ${{ env.NuGetDirectory }}/*.nupkg
+
+  deploy:
+    if: github.event_name = 'release'
+    runs-on: ubuntu-latest
+    needs: [ pack ]
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: nuget-packages
+          path: ${{ env.NuGetDirectory }}
+      - name: Setup dotnet ${{ matrix.dotnet-version }}
+        uses: actions/setup-dotnet@v4
+      - name: Publish Nuget packages
+        run: | 
+          for file in $(find "${{ env.NuGetDirectory }}" -type f -name "*.nupkg"); do
+            dotnet nuget push $file --api-key "${{ secrets.NUGET_APIKEY }}" --source https://api.nuget.org/v3/index.json
+          done
+        
+  
     
