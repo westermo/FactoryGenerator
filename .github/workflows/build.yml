@@ -47,7 +47,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - name: Pack Generator
-        run: dotnet pack FactoryGenerator/FactoryGenerator.csproj -o "${{ env.NuGetDirectory }}"
+        run: dotnet pack FactoryGenerator/FactoryGenerator.csproj -o "${{ env.NuGetDirectory }}" --property:RepositoryCommit="${{ env.COMMIT_SHA }}" --property:InformationalVersion="UNRELEASED" --property:AssemblyVersion="0.0.0" --property:FileVersion="0.0.0" --property:Version="0.0.0"
       - name: Pack Attributes
         run: dotnet pack FactoryGenerator.Attributes/FactoryGenerator.Attributes.csproj -o "${{ env.NuGetDirectory }}" --property:RepositoryCommit="${{ env.COMMIT_SHA }}" --property:InformationalVersion="UNRELEASED" --property:AssemblyVersion="0.0.0" --property:FileVersion="0.0.0" --property:Version="0.0.0"
       - uses: actions/upload-artifact@v4
@@ -68,7 +68,7 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - name: Pack Generator
-        run: dotnet pack FactoryGenerator/FactoryGenerator.csproj -o "${{ env.NuGetDirectory }}"
+        run: dotnet pack FactoryGenerator/FactoryGenerator.csproj -o "${{ env.NuGetDirectory }}" --property:RepositoryCommit="${{ env.COMMIT_SHA }}" --property:InformationalVersion="${{ github.ref_name }}" --property:AssemblyVersion="${{ github.ref_name }}" --property:FileVersion="${{ github.ref_name }}" --property:Version="${{ github.ref_name }}"
       - name: Pack Attributes
         run: dotnet pack FactoryGenerator.Attributes/FactoryGenerator.Attributes.csproj -o "${{ env.NuGetDirectory }}" --property:RepositoryCommit="${{ env.COMMIT_SHA }}" --property:InformationalVersion="${{ github.ref_name }}" --property:AssemblyVersion="${{ github.ref_name }}" --property:FileVersion="${{ github.ref_name }}" --property:Version="${{ github.ref_name }}"
       - uses: actions/upload-artifact@v4
