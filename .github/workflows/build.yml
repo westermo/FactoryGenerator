@@ -43,10 +43,10 @@ jobs:
         with:
           dotnet-version: "8.0.x"
       - run: |
-          if [[ "${{ github.event_name }}" == "release" && "${{ github.ref_name }}" =~ ^(?<version>\d+\.\d+\.\d+) ]]; then
+          if [[ "$GITHUB_EVENT_NAME" == "release" && "$GITHUB_REF" =~ ^refs/tags/(?<version>\d+\.\d+\.\d+) ]]; then
               echo "VERSION=${BASH_REMATCH[version]}" >> $GITHUB_ENV
               echo "FILE_VERSION=${BASH_REMATCH[version]}.0" >> $GITHUB_ENV
-              echo "INFORMAL_VERSION=${{ github.ref_name }}" >> $GITHUB_ENV
+              echo "INFORMAL_VERSION=main" >> $GITHUB_ENV
           else
               echo "VERSION=0.0.0" >> $GITHUB_ENV
               echo "FILE_VERSION=0.0.0.0" >> $GITHUB_ENV
