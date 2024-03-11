@@ -13,6 +13,7 @@
         <Copyright>Copyright © Westermo Network Technologies AB $(CurrentYear)</Copyright>
         <Authors>Westermo Network Technologies AB</Authors>
         <PackageVersion>0.1.2</PackageVersion>
+        <Description>FactoryGenerator is an IoC container that uses Roslyn to prepare a container for consumption at compile-time.</Description>
     </PropertyGroup>
 
     <ItemGroup>
