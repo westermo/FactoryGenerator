@@ -110,3 +110,29 @@ public class RequestedArray2 : IRequestedArray;
 
 [Inject]
 public class RequestedArray3 : IRequestedArray;
+
+public interface IDisposer;
+
+[Inject]
+public class DisposableNonSingleton : IDisposer, IDisposable
+{
+    public bool WasDisposed { get; private set; }
+
+    public void Dispose()
+    {
+        WasDisposed = true;
+    }
+}
+
+public interface ISingletonDisposer;
+
+[Inject, Singleton]
+public class DisposableSingleton : ISingletonDisposer, IDisposable
+{
+    public bool WasDisposed { get; private set; }
+
+    public void Dispose()
+    {
+        WasDisposed = true;
+    }
+}

@@ -11,16 +11,20 @@ namespace FactoryGenerator
     {
         public INamedTypeSymbol Type { get; }
         public ImmutableArray<INamedTypeSymbol> Interfaces { get; }
-        private bool Singleton { get; }
+        public bool Singleton { get; }
         public BooleanInjection? BooleanInjection { get; }
         private ISymbol? Lambda { get; }
         private string LazyName => "m_" + Name.Replace("()", "");
+        public string Name => SymbolUtility.MemberName(Type).Replace("()", "") + (Lambda is not null ? Lambda.Name : string.Empty) + "()";
+        public bool Disposable { get; }
 
         public string Declaration(ImmutableArray<INamedTypeSymbol> availableParameters)
         {
             var creationCall = CreationCall(availableParameters);
             return Singleton ? SymbolUtility.SingletonFactory(Type, Name, LazyName, creationCall) : $"private {Type} {Name} => {creationCall};";
         }
+
+        public string DisposeCall => LazyName + "?.Dispose();";
 
         private string CreationCall(ImmutableArray<INamedTypeSymbol> availableParameters)
         {
@@ -31,15 +35,19 @@ namespace FactoryGenerator
                 case IMethodSymbol methodSymbol:
                     if (!availableParameters.Contains(methodSymbol.ContainingType))
                     {
-                        throw new Exception($"Could not find any [Inject]ed implementations of {methodSymbol.ContainingType} to use as the source for the injection of {methodSymbol.ContainingType}.{methodSymbol.Name}. Please provide at least one injection of the type {methodSymbol.ContainingType}.");
+                        throw new Exception(
+                            $"Could not find any [Inject]ed implementations of {methodSymbol.ContainingType} to use as the source for the injection of {methodSymbol.ContainingType}.{methodSymbol.Name}. Please provide at least one injection of the type {methodSymbol.ContainingType}.");
                     }
+
                     creationCall = $"{SymbolUtility.MemberName(methodSymbol.ContainingType)}.{methodSymbol.Name}{MakeMethodCall(methodSymbol, missing)}";
                     break;
                 case IPropertySymbol parameterSymbol:
                     if (!availableParameters.Contains(parameterSymbol.ContainingType))
                     {
-                        throw new Exception($"Could not find any [Inject]ed implementations of {parameterSymbol.ContainingType} to use as the source for the injection of {parameterSymbol.ContainingType}.{parameterSymbol.Name}. Please provide at least one injection of the type {parameterSymbol.ContainingType}.");
+                        throw new Exception(
+                            $"Could not find any [Inject]ed implementations of {parameterSymbol.ContainingType} to use as the source for the injection of {parameterSymbol.ContainingType}.{parameterSymbol.Name}. Please provide at least one injection of the type {parameterSymbol.ContainingType}.");
                     }
+
                     creationCall = $"{SymbolUtility.MemberName(parameterSymbol.ContainingType)}.{parameterSymbol.Name}";
                     break;
                 default:
@@ -126,16 +134,19 @@ namespace FactoryGenerator
             return chosenConstructor;
         }
 
-        private Injection(INamedTypeSymbol type, ImmutableArray<INamedTypeSymbol> interfaces, bool singleton, BooleanInjection? booleanInjection = null, ISymbol? lambda = null)
+        private Injection(INamedTypeSymbol type, ImmutableArray<INamedTypeSymbol> interfaces,
+                          bool singleton,
+                          bool disposable,
+                          BooleanInjection? booleanInjection, ISymbol? lambda)
         {
             Type = type;
             Interfaces = interfaces;
             Singleton = singleton;
+            Disposable = disposable;
             BooleanInjection = booleanInjection;
             Lambda = lambda;
         }
 
-        public string Name => SymbolUtility.MemberName(Type).Replace("()", "") + (Lambda is not null ? Lambda.Name : string.Empty) + "()";
 
         public static Injection? Create(ISymbol symbol, ImmutableArray<AttributeData> attributes, CancellationToken token)
         {
@@ -144,24 +155,24 @@ namespace FactoryGenerator
             switch (symbol)
             {
                 case INamedTypeSymbol nts:
-                    {
-                        namedTypeSymbol = nts;
-                        if (namedTypeSymbol.TypeKind == TypeKind.Interface) return null;
-                        if (namedTypeSymbol.IsAbstract) return null;
-                        break;
-                    }
+                {
+                    namedTypeSymbol = nts;
+                    if (namedTypeSymbol.TypeKind == TypeKind.Interface) return null;
+                    if (namedTypeSymbol.IsAbstract) return null;
+                    break;
+                }
                 case IMethodSymbol methodSymbol:
-                    {
-                        namedTypeSymbol = methodSymbol.ReturnType as INamedTypeSymbol;
-                        lambda = methodSymbol;
-                        break;
-                    }
+                {
+                    namedTypeSymbol = methodSymbol.ReturnType as INamedTypeSymbol;
+                    lambda = methodSymbol;
+                    break;
+                }
                 case IPropertySymbol property:
-                    {
-                        namedTypeSymbol = property.Type as INamedTypeSymbol;
-                        lambda = property;
-                        break;
-                    }
+                {
+                    namedTypeSymbol = property.Type as INamedTypeSymbol;
+                    lambda = property;
+                    break;
+                }
             }
 
             if (namedTypeSymbol is null) return null;
@@ -215,6 +226,7 @@ namespace FactoryGenerator
             }
 
             interfaces = interfaces.AddRange(attributedInterfaces);
+            var isDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.Name.Equals("IDisposable"));
             var disposable = interfaces.FirstOrDefault(interfaceSymbol => interfaceSymbol.Name.Contains("IDisposable"));
 
             if (disposable is not null)
@@ -225,7 +237,7 @@ namespace FactoryGenerator
             interfaces = interfaces.RemoveRange(preventedInterfaces).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>().ToImmutableArray();
 
 
-            return new Injection(namedTypeSymbol, interfaces, singleInstance, boolean, lambda);
+            return new Injection(namedTypeSymbol, interfaces, singleInstance, isDisposable, boolean, lambda);
         }
 
         private static BooleanInjection? HandleBoolean(AttributeData attributeData)
