@@ -118,6 +118,39 @@ public class InjectionDetectionTests()
         m_container.Resolve<IOverridable>().ShouldBeOfType<Overrider>();
     }
 
+
+    [Fact]
+    public void DisposingContainerDisposesSingletons()
+    {
+        ISingletonDisposer singleton;
+        {
+            using var myContainer = new DependencyInjectionContainer(false, default!);
+            singleton = myContainer.Resolve<ISingletonDisposer>();
+            singleton.ShouldBeOfType<DisposableSingleton>();
+        }
+        ((DisposableSingleton) singleton).WasDisposed.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void DisposingContainerDoesNotDisposeUntrackedInstances()
+    {
+        IDisposer singleton;
+        {
+            using var myContainer = new DependencyInjectionContainer(false, default!);
+            singleton = myContainer.Resolve<IDisposer>();
+            singleton.ShouldBeOfType<DisposableNonSingleton>();
+        }
+        ((DisposableNonSingleton) singleton).WasDisposed.ShouldBeFalse();
+        ((DisposableNonSingleton) singleton).Dispose();
+        ((DisposableNonSingleton) singleton).WasDisposed.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void DisposingContainerDoesNotDisposesUnreferencedSingletons()
+    {
+        using var myContainer = new DependencyInjectionContainer(false, default!);
+    }
+
     [Fact]
     public void ArrayExpressionsCollect()
     {
