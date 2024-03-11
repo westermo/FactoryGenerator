@@ -24,7 +24,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - name: Setup dotnet ${{ matrix.dotnet-version }}
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
           dotnet-version: '8.0.x'
       - name: Restore
@@ -33,3 +33,26 @@ jobs:
         run: dotnet build FactoryGenerator.sln --no-restore
       - name: Test
         run: dotnet test FactoryGenerator.sln --no-build --no-restore
+
+        
+  pack:
+
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup dotnet ${{ matrix.dotnet-version }}
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Pack Generator
+        run: dotnet pack FactoryGenerator/FactoryGenerator.csproj -o "${{ env.NuGetDirectory }}"
+      - name: Pack Attributes
+        run: dotnet pack FactoryGenerator.Attributes/FactoryGenerator.Attributes.csproj -o "${{ env.NuGetDirectory }}"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: nuget-packages
+          if-no-files-found: error
+          retention-days: 1
+          path: ${{ env.NuGetDirectory }}/*.nupkg
+    
