@@ -94,9 +94,7 @@ namespace FactoryGenerator
                     parameters.Add(parameter.Name);
                     continue;
                 }
-
-                if (parameter.Type is not INamedTypeSymbol named) throw new Exception($"Unnameable Parameter {parameter}");
-                parameters.Add(SymbolUtility.MemberName(named));
+                parameters.Add(SymbolUtility.MemberName(parameter.Type));
             }
 
             return $"({string.Join(", ", parameters)})";
