@@ -1,13 +1,21 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Microsoft.CodeAnalysis.Diagnostics;
 
 namespace FactoryGenerator
 {
+    public class LoggingOptions
+    {
+        public LogLevel LogLevel { get; set; }
+        public string? FileName { get; set; }
+    }
+
     [Generator]
     public class FactoryGenerator : IIncrementalGenerator
     {
@@ -16,25 +24,44 @@ namespace FactoryGenerator
 
         public void Initialize(IncrementalGeneratorInitializationContext context)
         {
+            var logProvider = SetupLog(context);
             var references = context.CompilationProvider.Select(GetGlobalNamespace);
             var rest = references.SelectMany(FindMethods);
             var attributes = rest.Collect();
             var compilation = context.CompilationProvider;
             var syntaxUsages = context.SyntaxProvider.CreateSyntaxProvider(ResolveSymbols, ResolveTransformations)
                                       .Collect();
-            var combined = attributes.Combine(compilation).Combine(syntaxUsages);
+            var combined = attributes.Combine(compilation).Combine(syntaxUsages).Combine(logProvider);
             context.RegisterSourceOutput(combined, MakeAutofacModule);
         }
 
-        private void MakeAutofacModule(SourceProductionContext context,
-                                       ((ImmutableArray<Injection> Injections, Compilation Compilation) Left, ImmutableArray<INamedTypeSymbol?>
-                                           CompileTimeResolvedTypes) data)
+        private IncrementalValueProvider<LoggingOptions?> SetupLog(IncrementalGeneratorInitializationContext context)
         {
-            var injections = data.Left.Injections;
-            var compilation = data.Left.Compilation;
-            var usages = data.CompileTimeResolvedTypes;
+            return context.AnalyzerConfigOptionsProvider.Select(LogOptionsProvider);
+        }
 
-            var source = GenerateCode(injections, compilation, usages).ToArray();
+        private LoggingOptions? LogOptionsProvider(AnalyzerConfigOptionsProvider provider, CancellationToken token)
+        {
+            if (!provider.GlobalOptions.TryGetValue($"build_property.{nameof(FactoryGenerator)}_FileName", out var fileName)) return default;
+            if (!provider.GlobalOptions.TryGetValue($"build_property.{nameof(FactoryGenerator)}_LogLevel", out var logLevel)) return default;
+            if (!Enum.TryParse<LogLevel>(logLevel, out var level)) return default;
+            return new LoggingOptions
+            {
+                FileName = fileName,
+                LogLevel = level
+            };
+        }
+
+        private void MakeAutofacModule(SourceProductionContext context,
+                                       (((ImmutableArray<Injection> Injections, Compilation Compilation) Left, ImmutableArray<INamedTypeSymbol?> CompileTimeResolvedTypes) Left, LoggingOptions? log)
+                                           data)
+        {
+            var injections = data.Left.Left.Injections;
+            var compilation = data.Left.Left.Compilation;
+            var usages = data.Left.CompileTimeResolvedTypes;
+            var log = data.log?.FileName == null ? NullLogger.Instance : new Logger(data.log.FileName, data.log.LogLevel);
+
+            var source = GenerateCode(injections, compilation, usages, log).ToArray();
             context.AddSource("DependencyInjectionContainer.Lookup.g.cs", source[0]);
             context.AddSource("DependencyInjectionContainer.Constructor.g.cs", source[1]);
             context.AddSource("DependencyInjectionContainer.Declarations.g.cs", source[2]);
@@ -100,8 +127,9 @@ namespace FactoryGenerator
         }
 
         private static IEnumerable<string> GenerateCode(ImmutableArray<Injection> dataInjections,
-                                                        Compilation compilation, ImmutableArray<INamedTypeSymbol?> usages)
+                                                        Compilation compilation, ImmutableArray<INamedTypeSymbol?> usages, ILogger log)
         {
+            log.Log(LogLevel.Debug, "Starting Code Generation");
             var usingStatements = $@"
 using System;
 using System.Collections.Generic;
@@ -125,6 +153,7 @@ public partial class DependencyInjectionContainer : IContainer
     private Dictionary<Type,Func<object>> m_lookup;
     private object m_lock = new();
 }}";
+
             var booleans = dataInjections.Select(inj => inj.BooleanInjection).Where(b => b is not null)
                                          .Select(b => b!.Key).Distinct();
             var allArguments = booleans.Select(b => $"bool {b}").ToList();
@@ -132,6 +161,7 @@ public partial class DependencyInjectionContainer : IContainer
             //Put all test-overrides at the end
             foreach (var injection in ordered.ToArray())
             {
+                log.Log(LogLevel.Debug, $"Traversing {injection.Name}");
                 if (!injection.Type.ToString().Contains("Test")) continue;
                 ordered.Remove(injection); //Remove it from current position
                 ordered.Add(injection); //Add it to the end
@@ -174,11 +204,15 @@ public partial class DependencyInjectionContainer : IContainer
                 if (possibilities.All(i => i.BooleanInjection == null))
                 {
                     var chosen = possibilities.Last();
+
                     if (SymbolUtility.MemberName(interfaceSymbol) != chosen.Name)
                     {
                         if (!declarations.ContainsKey(SymbolUtility.MemberName(interfaceSymbol)))
+                        {
+                            log.Log(LogLevel.Information, $"Selecting {chosen.Name} for {interfaceSymbol}");
                             declarations[SymbolUtility.MemberName(interfaceSymbol)] =
                                 $"private {interfaceSymbol} {SymbolUtility.MemberName(interfaceSymbol)} => {chosen.Name};";
+                        }
                     }
                 }
                 else
@@ -204,8 +238,11 @@ public partial class DependencyInjectionContainer : IContainer
                     }
 
                     if (!declarations.ContainsKey(SymbolUtility.MemberName(interfaceSymbol)))
+                    {
+                        log.Log(LogLevel.Information, $"Selecting {ternary} for {interfaceSymbol}");
                         declarations[SymbolUtility.MemberName(interfaceSymbol)] =
                             $"private {interfaceSymbol} {SymbolUtility.MemberName(interfaceSymbol)} => {ternary};";
+                    }
                 }
             }
 
@@ -219,6 +256,7 @@ public partial class DependencyInjectionContainer : IContainer
                 if (named.TypeArguments.Length != 1) continue;
                 var type = (INamedTypeSymbol) named.TypeArguments[0];
                 var name = parameter.Name;
+                log.Log(LogLevel.Debug, $"Creating Array: {name} of type {type}[]");
                 MakeArray(arrayDeclarations, name, type, interfaceInjectors);
                 constructorParameters.Remove(parameter);
                 localizedParameters.Add(parameter);
@@ -229,6 +267,7 @@ public partial class DependencyInjectionContainer : IContainer
                 if (parameter.Type is not IArrayTypeSymbol array) continue;
                 if (array.ElementType is not INamedTypeSymbol type) continue;
                 var name = parameter.Name;
+                log.Log(LogLevel.Debug, $"Creating Array: {name} of type {type}[]");
                 MakeArray(arrayDeclarations, name, type, interfaceInjectors);
 
                 constructorParameters.Remove(parameter);
@@ -243,8 +282,10 @@ public partial class DependencyInjectionContainer : IContainer
                 if (request is null) continue;
                 if (!SymbolUtility.IsEnumerable(request)) continue;
                 if (request.TypeArguments.Length != 1) continue;
+                log.Log(LogLevel.Information, $"Creating Requested: {request}");
                 var type = (INamedTypeSymbol) request.TypeArguments[0];
                 var name = SymbolUtility.MemberName(request).Replace("()", "");
+                log.Log(LogLevel.Debug, $"Creating Array: {name} of type {type}[]");
 
                 MakeArray(arrayDeclarations, name, type, interfaceInjectors, true);
                 requested.Add(request);
@@ -255,6 +296,7 @@ public partial class DependencyInjectionContainer : IContainer
             {
                 if (parameter.Type.Name.Contains("IContainer"))
                 {
+                    log.Log(LogLevel.Debug, $"Registering {parameter.Name} as Self");
                     declarations[parameter.Name] = $"private IContainer {parameter.Name} => this;";
                     constructorParameters.Remove(parameter);
                 }
@@ -265,6 +307,8 @@ public partial class DependencyInjectionContainer : IContainer
             allArguments.AddRange(arguments);
 
             var constructor = "(" + string.Join(", ", allArguments) + ")";
+
+            log.Log(LogLevel.Debug, $"Resulting Constructor: {constructor}");
             var constructorFields = string.Join("\n\t", allArguments.Select(arg => arg + ";"));
             var constructorAssignments = string.Join("\n\t\t",
                                                      allArguments.Select(arg => arg.Split(' ').Last()).Select(arg => $"this.{arg} = {arg};"));
@@ -341,6 +385,7 @@ public partial class DependencyInjectionContainer
         return source;
     }}";
             }
+
             if (function)
             {
                 declarations[name] = $@"
