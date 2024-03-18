@@ -136,3 +136,11 @@ public class DisposableSingleton : ISingletonDisposer, IDisposable
         WasDisposed = true;
     }
 }
+
+public interface IOverrideBoolean;
+
+[Inject, Boolean("A")]
+public class OverridenBooleanOption : IOverrideBoolean;
+
+[Inject]
+public class OverridenFallback : IOverrideBoolean;

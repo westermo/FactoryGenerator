@@ -5,9 +5,9 @@ using Inheritor.Generated;
 namespace Inheritor;
 
 [Inject]
-public class Overrider : IOverridable
-{
-}
+public class Overrider : IOverridable;
+[Inject]
+public class OverridingBoolean : IOverrideBoolean;
 
 public static class Program
 {

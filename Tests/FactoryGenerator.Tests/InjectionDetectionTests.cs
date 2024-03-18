@@ -8,7 +8,7 @@ namespace FactoryGenerator.Tests;
 
 public class InjectionDetectionTests()
 {
-    private readonly DependencyInjectionContainer m_container = new(default, new NonInjectedClass());
+    private readonly DependencyInjectionContainer m_container = new(default, default, new NonInjectedClass());
 
     [Fact]
     public void InjectedTypesAreResolvable()
@@ -36,7 +36,7 @@ public class InjectionDetectionTests()
     public void ResolveUsesArguments()
     {
         var dummy = new NonInjectedClass();
-        var myContainer = new DependencyInjectionContainer(default, dummy);
+        var myContainer = new DependencyInjectionContainer(default, default, dummy);
         myContainer.Resolve<Constructed>().NonInjectedClassArgument.ShouldBe(dummy);
     }
 
@@ -45,7 +45,7 @@ public class InjectionDetectionTests()
     [InlineData(false, typeof(FallbackImplementation))]
     public void PickupSingleInjectionWithBoolean(bool value, System.Type expected)
     {
-        var myContainer = new DependencyInjectionContainer(value, default!);
+        var myContainer = new DependencyInjectionContainer(value, default, default!);
         myContainer.Resolve<ISwitchableInterface>().ShouldBeOfType(expected);
     }
 
@@ -161,5 +161,10 @@ public class InjectionDetectionTests()
     public void RequestedArraysArePresent()
     {
         Program.Method().Count().ShouldBe(3);
+    }
+    [Fact]
+    public void BooleanFallbackIsOverriden()
+    {
+        m_container.Resolve<IOverrideBoolean>().ShouldBeOfType<OverridingBoolean>();
     }
 }
