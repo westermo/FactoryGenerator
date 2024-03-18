@@ -124,7 +124,7 @@ public class InjectionDetectionTests()
     {
         ISingletonDisposer singleton;
         {
-            using var myContainer = new DependencyInjectionContainer(false, default!);
+            using var myContainer = new DependencyInjectionContainer(false, default, default!);
             singleton = myContainer.Resolve<ISingletonDisposer>();
             singleton.ShouldBeOfType<DisposableSingleton>();
         }
@@ -136,7 +136,7 @@ public class InjectionDetectionTests()
     {
         IDisposer singleton;
         {
-            using var myContainer = new DependencyInjectionContainer(false, default!);
+            using var myContainer = new DependencyInjectionContainer(false, default, default!);
             singleton = myContainer.Resolve<IDisposer>();
             singleton.ShouldBeOfType<DisposableNonSingleton>();
         }
@@ -148,7 +148,7 @@ public class InjectionDetectionTests()
     [Fact]
     public void DisposingContainerDoesNotDisposesUnreferencedSingletons()
     {
-        using var myContainer = new DependencyInjectionContainer(false, default!);
+        using var myContainer = new DependencyInjectionContainer(false, default, default!);
     }
 
     [Fact]
