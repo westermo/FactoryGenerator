@@ -13,7 +13,7 @@ public static class Program
 {
     public static IEnumerable<IRequestedArray> Method()
     {
-        var container = new DependencyInjectionContainer(false, null!);
+        var container = new DependencyInjectionContainer(false, false, null!);
         var array = container.Resolve<IEnumerable<IRequestedArray>>();
         return array;
     }
