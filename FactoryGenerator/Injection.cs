@@ -177,6 +177,15 @@ namespace FactoryGenerator
 
             var singleInstance = false;
             var acquireChildInterfaces = false;
+            var asSelf = false;
+            if(namedTypeSymbol.Interfaces.Length == 0)
+            {
+                asSelf = true;
+            }
+            if (namedTypeSymbol.TypeKind == TypeKind.Interface)
+            {
+                asSelf = true;
+            }
             BooleanInjection? boolean = null;
             HashSet<INamedTypeSymbol> attributedInterfaces = new(SymbolEqualityComparer.Default);
             HashSet<INamedTypeSymbol> preventedInterfaces = new(SymbolEqualityComparer.Default);
@@ -207,7 +216,7 @@ namespace FactoryGenerator
 
                         break;
                     case "SelfAttribute":
-                        attributedInterfaces.Add(namedTypeSymbol);
+                        asSelf = true;
                         break;
                     case "BooleanAttribute":
                         boolean = HandleBoolean(attributeData);
@@ -218,9 +227,9 @@ namespace FactoryGenerator
             }
 
             var interfaces = acquireChildInterfaces ? namedTypeSymbol.AllInterfaces : namedTypeSymbol.Interfaces;
-            if (namedTypeSymbol.TypeKind == TypeKind.Interface)
+            if (asSelf)
             {
-                interfaces = ImmutableArray.Create(namedTypeSymbol);
+                interfaces = interfaces.Add(namedTypeSymbol);
             }
 
             interfaces = interfaces.AddRange(attributedInterfaces);
