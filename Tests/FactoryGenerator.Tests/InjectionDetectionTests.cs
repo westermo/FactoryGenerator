@@ -140,8 +140,6 @@ public class InjectionDetectionTests()
             singleton = myContainer.Resolve<IDisposer>();
             singleton.ShouldBeOfType<DisposableNonSingleton>();
         }
-        ((DisposableNonSingleton) singleton).WasDisposed.ShouldBeFalse();
-        ((DisposableNonSingleton) singleton).Dispose();
         ((DisposableNonSingleton) singleton).WasDisposed.ShouldBeTrue();
     }
 

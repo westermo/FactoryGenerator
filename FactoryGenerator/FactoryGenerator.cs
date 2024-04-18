@@ -142,13 +142,35 @@ namespace {compilation.Assembly.Name}.Generated;
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
 public partial class DependencyInjectionContainer : IContainer
 {{
+    private List<IDisposable> resolvedInstances = new List<IDisposable>();
+
     public T Resolve<T>()
     {{
-        return (T)Resolve(typeof(T));
+        var instance = (T)Resolve(typeof(T));
+        if (instance is IDisposable disposable)
+        {{
+            resolvedInstances.Add(disposable);
+        }}
+        return instance;
     }}
+
     public object Resolve(Type type)
     {{
-        return m_lookup[type]();   
+        var instance = m_lookup[type]();
+        if (instance is IDisposable disposable)
+        {{
+            resolvedInstances.Add(disposable);
+        }}
+        return instance;
+    }}
+
+    public void Dispose()
+    {{
+        foreach (var disposable in resolvedInstances)
+        {{
+            disposable.Dispose();
+        }}
+        resolvedInstances.Clear();
     }}
     private Dictionary<Type,Func<object>> m_lookup;
     private object m_lock = new();
@@ -361,10 +383,6 @@ public partial class DependencyInjectionContainer
 public partial class DependencyInjectionContainer
 {{
     {string.Join("\n\t", declarations.Values)}
-    public void Dispose()
-    {{
-        {string.Join("\n\t", disposables.Select(d => d.DisposeCall))}
-    }}
 }}";
         }
 
