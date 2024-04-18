@@ -142,16 +142,11 @@ namespace {compilation.Assembly.Name}.Generated;
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
 public partial class DependencyInjectionContainer : IContainer
 {{
-    private List<IDisposable> resolvedInstances = new List<IDisposable>();
+    private readonly List<IDisposable> resolvedInstances = new List<IDisposable>();
 
     public T Resolve<T>()
     {{
-        var instance = (T)Resolve(typeof(T));
-        if (instance is IDisposable disposable)
-        {{
-            resolvedInstances.Add(disposable);
-        }}
-        return instance;
+        return (T)Resolve(typeof(T));
     }}
 
     public object Resolve(Type type)
