@@ -129,6 +129,7 @@ namespace FactoryGenerator
         private static IEnumerable<string> GenerateCode(ImmutableArray<Injection> dataInjections,
                                                         Compilation compilation, ImmutableArray<INamedTypeSymbol?> usages, ILogger log)
         {
+            CheckForCycles(dataInjections);
             log.Log(LogLevel.Debug, "Starting Code Generation");
             var usingStatements = $@"
 using System;
@@ -362,6 +363,61 @@ public partial class DependencyInjectionContainer : IContainer
                                      constructorParameters);
             yield return Declarations(usingStatements, declarations, disposables);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations);
+        }
+
+        private static void CheckForCycles(ImmutableArray<Injection> dataInjections)
+        {
+            var tree = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
+            foreach (var injection in dataInjections)
+            {
+                foreach (var iface in injection.Interfaces)
+                {
+                    if (!tree.ContainsKey(iface))
+                    {
+                        tree[iface] = new List<INamedTypeSymbol>();
+                    }
+                }
+                foreach (var constructor in injection.Type.Constructors)
+                {
+                    foreach (var parameter in constructor.Parameters)
+                    {
+                        if (parameter.Type is INamedTypeSymbol named)
+                        {
+                            if (SymbolUtility.IsEnumerable(parameter.Type))
+                            {
+                                if (named.TypeArguments.Length != 1) continue;
+                                named = (INamedTypeSymbol) named.TypeArguments[0];
+                            }
+                            foreach (var iface in injection.Interfaces)
+                            {
+                                tree[iface].Add(named);
+
+                            }
+                            if (tree.TryGetValue(named, out var list))
+                            {
+                                foreach (var iface in injection.Interfaces)
+                                {
+                                    if (list.Contains(iface)) throw new InvalidOperationException($"Cyclic Dependency Detected between {injection.Type} and {iface}");
+                                }
+                            }
+                        }
+                        if (parameter.Type is IArrayTypeSymbol array)
+                        {
+                            if (array.ElementType is INamedTypeSymbol arrType)
+                            {
+                                tree[injection.Type].Add(arrType);
+                                if (tree.TryGetValue(arrType, out var list))
+                                {
+                                    foreach (var iface in injection.Interfaces)
+                                    {
+                                        if (list.Contains(iface)) throw new InvalidOperationException($"Cyclic Dependency Detected between {injection.Type} and {iface}");
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         private static string Constructor(string usingStatements, string constructorFields, string constructor, string constructorAssignments, int dictSize,
