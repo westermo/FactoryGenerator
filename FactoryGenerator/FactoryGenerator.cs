@@ -152,10 +152,6 @@ public partial class DependencyInjectionContainer : IContainer
     public object Resolve(Type type)
     {{
         var instance = m_lookup[type]();
-        if (instance is IDisposable disposable)
-        {{
-            resolvedInstances.Add(disposable);
-        }}
         return instance;
     }}
 

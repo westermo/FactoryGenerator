@@ -21,7 +21,7 @@ namespace FactoryGenerator
         public string Declaration(ImmutableArray<INamedTypeSymbol> availableParameters)
         {
             var creationCall = CreationCall(availableParameters);
-            return Singleton ? SymbolUtility.SingletonFactory(Type, Name, LazyName, creationCall) : $"private {Type} {Name} => {creationCall};";
+            return Singleton ? SymbolUtility.SingletonFactory(Type, Name, LazyName, creationCall, Disposable) : Disposable ? SymbolUtility.DisposableFactory(Type, Name, creationCall) : $"private {Type} {Name} => {creationCall};";
         }
 
         public string DisposeCall => LazyName + "?.Dispose();";

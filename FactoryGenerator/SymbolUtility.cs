@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using Microsoft.CodeAnalysis;
@@ -13,11 +14,11 @@ namespace FactoryGenerator
                 switch (namespaceOrTypeSymbol)
                 {
                     case INamespaceSymbol @namespace:
-                    {
-                        foreach (var nested in GetAllTypes(@namespace))
-                            yield return nested;
-                        break;
-                    }
+                        {
+                            foreach (var nested in GetAllTypes(@namespace))
+                                yield return nested;
+                            break;
+                        }
                     case INamedTypeSymbol type:
                         yield return type;
                         break;
@@ -47,8 +48,29 @@ namespace FactoryGenerator
                              .Replace(" ", "") + "()";
         }
 
-        public static string SingletonFactory(INamedTypeSymbol type, string name, string lazyName, string creation)
+        public static string SingletonFactory(INamedTypeSymbol type, string name, string lazyName, string creation, bool disposable)
         {
+            if (disposable)
+            {
+
+                return $@"
+    private {type} {name}
+    {{
+        if ({lazyName} != null)
+            return {lazyName};
+    
+        lock (m_lock)
+        {{
+            if ({lazyName} != null)
+                return {lazyName};
+            var value = {creation};
+            resolvedInstances.Add(value);
+            return {lazyName} = value;
+        }}
+    }} 
+    private {type}? {lazyName};";
+            }
+
             return $@"
     private {type} {name}
     {{
@@ -64,5 +86,17 @@ namespace FactoryGenerator
     }} 
     private {type}? {lazyName};";
         }
+
+        internal static string DisposableFactory(INamedTypeSymbol type, string name, string creationCall)
+        {
+            return $@"
+    private {type} {name}
+    {{    
+        var value = {creationCall};
+        resolvedInstances.Add(value);
+        return value;
+    }}";
+        }
+
     }
 }
