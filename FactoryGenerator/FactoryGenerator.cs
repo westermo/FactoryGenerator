@@ -140,6 +140,7 @@ namespace {compilation.Assembly.Name}.Generated;
 
             yield return $@"{usingStatements}
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
+#nullable disable
 public partial class DependencyInjectionContainer : IContainer
 {{
     private readonly List<IDisposable> resolvedInstances = new List<IDisposable>();
@@ -162,6 +163,33 @@ public partial class DependencyInjectionContainer : IContainer
             disposable.Dispose();
         }}
         resolvedInstances.Clear();
+    }}
+
+    public bool TryResolve(Type type, out object resolved)
+    {{
+        if(m_lookup.TryGetValue(type, out var factory))
+        {{
+            resolved = factory();
+            return true;
+        }}
+        resolved = default;
+        return false;
+    }}
+
+
+    public bool TryResolve<T>(out T resolved)
+    {{
+        if(m_lookup.TryGetValue(typeof(T), out var factory))
+        {{
+            var value = factory();
+            if(value is T t)
+            {{
+                resolved = t;
+                return true;
+            }}
+        }}
+        resolved = default;
+        return false;
     }}
     private Dictionary<Type,Func<object>> m_lookup;
     private object m_lock = new();

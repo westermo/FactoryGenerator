@@ -8,7 +8,7 @@ namespace FactoryGenerator.Tests;
 
 public class InjectionDetectionTests()
 {
-    private readonly DependencyInjectionContainer m_container = new(default, default, new NonInjectedClass());
+    private readonly IContainer m_container = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
     [Fact]
     public void InjectedTypesAreResolvable()
@@ -164,5 +164,17 @@ public class InjectionDetectionTests()
     public void BooleanFallbackIsOverriden()
     {
         m_container.Resolve<IOverrideBoolean>().ShouldBeOfType<OverridingBoolean>();
+    }
+    [Fact]
+    public void TryResolveWithTypeArgumentsWorks()
+    {
+        m_container.TryResolve<IType>(out var type).ShouldBeTrue();
+        type.ShouldBeOfType<Type>();
+    }
+    [Fact]
+    public void TryResolveWithTypeParameterWorks()
+    {
+        m_container.TryResolve(typeof(IType), out var type).ShouldBeTrue();
+        type.ShouldBeOfType<Type>();
     }
 }
