@@ -13,12 +13,36 @@ namespace FactoryGenerator
                 switch (namespaceOrTypeSymbol)
                 {
                     case INamespaceSymbol @namespace:
-                    {
-                        foreach (var nested in GetAllTypes(@namespace))
-                            yield return nested;
-                        break;
-                    }
+                        {
+                            foreach (var nested in GetAllTypes(@namespace))
+                                yield return nested;
+                            break;
+                        }
                     case INamedTypeSymbol type:
+
+                        foreach (var nested in GetAllTypes(type))
+                            yield return nested;
+                        yield return type;
+                        break;
+                }
+            }
+        }
+        public static IEnumerable<INamedTypeSymbol> GetAllTypes(INamedTypeSymbol root)
+        {
+            foreach (var namespaceOrTypeSymbol in root.GetMembers())
+            {
+                switch (namespaceOrTypeSymbol)
+                {
+                    case INamespaceSymbol @namespace:
+                        {
+                            foreach (var nested in GetAllTypes(@namespace))
+                                yield return nested;
+                            break;
+                        }
+                    case INamedTypeSymbol type:
+
+                        foreach (var nested in GetAllTypes(type))
+                            yield return nested;
                         yield return type;
                         break;
                 }

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Inherited;
 using Inheritor;
 using Inheritor.Generated;
@@ -164,5 +165,11 @@ public class InjectionDetectionTests()
     public void BooleanFallbackIsOverriden()
     {
         m_container.Resolve<IOverrideBoolean>().ShouldBeOfType<OverridingBoolean>();
+    }
+
+    [Fact]
+    public void ClassesInsideOtherClassesCanBeInjected()
+    {
+        m_container.Resolve<Containing.Containee>();
     }
 }

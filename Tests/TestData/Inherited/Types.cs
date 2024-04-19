@@ -144,3 +144,9 @@ public class OverridenBooleanOption : IOverrideBoolean;
 
 [Inject]
 public class OverridenFallback : IOverrideBoolean;
+
+public class Containing
+{
+    [Inject]
+    public class Containee;
+}
