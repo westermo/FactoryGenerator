@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Inherited;
 using Inheritor;
 using Inheritor.Generated;
@@ -176,5 +177,10 @@ public class InjectionDetectionTests()
     {
         m_container.TryResolve(typeof(IType), out var type).ShouldBeTrue();
         type.ShouldBeOfType<Type>();
+    }
+    [Fact]
+    public void ClassesInsideOtherClassesCanBeInjected()
+    {
+        m_container.Resolve<Containing.Containee>();
     }
 }
