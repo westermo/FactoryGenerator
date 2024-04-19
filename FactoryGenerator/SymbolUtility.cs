@@ -88,7 +88,7 @@ namespace FactoryGenerator
             if ({lazyName} != null)
                 return {lazyName};
             var value = {creation};
-            resolvedInstances.Add(value);
+            resolvedInstances.Add(new WeakReference<IDisposable>(value));
             return {lazyName} = value;
         }}
     }} 
@@ -117,7 +117,7 @@ namespace FactoryGenerator
     private {type} {name}
     {{    
         var value = {creationCall};
-        resolvedInstances.Add(value);
+        resolvedInstances.Add(new WeakReference<IDisposable>(value));
         return value;
     }}";
         }

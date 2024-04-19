@@ -144,7 +144,7 @@ namespace {compilation.Assembly.Name}.Generated;
 #nullable disable
 public partial class DependencyInjectionContainer : IContainer
 {{
-    private readonly List<IDisposable> resolvedInstances = new List<IDisposable>();
+    private readonly List<WeakReference<IDisposable>> resolvedInstances = new();
 
     public T Resolve<T>()
     {{
@@ -159,9 +159,12 @@ public partial class DependencyInjectionContainer : IContainer
 
     public void Dispose()
     {{
-        foreach (var disposable in resolvedInstances)
+        foreach (var weakReference in resolvedInstances)
         {{
-            disposable.Dispose();
+            if(weakReference.TryGetTarget(out var disposable))
+            {{
+                disposable.Dispose();
+            }}
         }}
         resolvedInstances.Clear();
     }}
