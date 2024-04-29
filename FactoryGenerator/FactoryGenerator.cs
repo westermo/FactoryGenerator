@@ -458,11 +458,12 @@ public sealed partial class LifetimeScope : IContainer
             var tree = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
             foreach (var injection in dataInjections)
             {
+                var node = new List<INamedTypeSymbol>();
                 foreach (var iface in injection.Interfaces)
                 {
                     if (!tree.ContainsKey(iface))
                     {
-                        tree[iface] = new List<INamedTypeSymbol>();
+                        tree[iface] = node;
                     }
                 }
 
@@ -478,10 +479,7 @@ public sealed partial class LifetimeScope : IContainer
                                 named = (INamedTypeSymbol) named.TypeArguments[0];
                             }
 
-                            foreach (var iface in injection.Interfaces)
-                            {
-                                tree[iface].Add(named);
-                            }
+                            node.Add(named);
 
                             if (tree.TryGetValue(named, out var list))
                             {
@@ -492,18 +490,13 @@ public sealed partial class LifetimeScope : IContainer
                             }
                         }
 
-                        if (parameter.Type is IArrayTypeSymbol array)
+                        if (parameter.Type is not IArrayTypeSymbol {ElementType: INamedTypeSymbol arrType}) continue;
                         {
-                            if (array.ElementType is INamedTypeSymbol arrType)
+                            node.Add(arrType);
+                            if (!tree.TryGetValue(arrType, out var list)) continue;
+                            foreach (var iface in injection.Interfaces)
                             {
-                                tree[injection.Type].Add(arrType);
-                                if (tree.TryGetValue(arrType, out var list))
-                                {
-                                    foreach (var iface in injection.Interfaces)
-                                    {
-                                        if (list.Contains(iface)) throw new InvalidOperationException($"Cyclic Dependency Detected between {injection.Type} and {iface}");
-                                    }
-                                }
+                                if (list.Contains(iface)) throw new InvalidOperationException($"Cyclic Dependency Detected between {injection.Type} and {iface}");
                             }
                         }
                     }
