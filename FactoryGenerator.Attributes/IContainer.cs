@@ -4,7 +4,7 @@ using System.Threading.Tasks;
 
 namespace FactoryGenerator;
 #nullable enable
-public interface IContainer : IDisposable
+public interface ILifetimeScope : IDisposable
 {
     T Resolve<T>();
     object Resolve(Type type);
@@ -16,4 +16,9 @@ public interface IContainer : IDisposable
 
     bool IsRegistered(Type type) => TryResolve(type, out _);
     bool IsRegistered<T>() => IsRegistered(typeof(T));
+}
+
+public interface IContainer : ILifetimeScope
+{
+    public ILifetimeScope BeginLifetimeScope();
 }

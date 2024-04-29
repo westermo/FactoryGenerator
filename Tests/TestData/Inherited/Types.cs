@@ -150,3 +150,19 @@ public class Containing
     [Inject]
     public class Containee;
 }
+
+public interface IScoped
+{
+    bool WasDisposed { get; }
+}
+
+[Inject, Scoped]
+public class Scoped : IDisposable, IScoped
+{
+    public bool WasDisposed { get; private set; }
+
+    public void Dispose()
+    {
+        WasDisposed = true;
+    }
+}

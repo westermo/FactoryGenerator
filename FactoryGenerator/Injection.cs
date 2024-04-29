@@ -12,16 +12,23 @@ namespace FactoryGenerator
         public INamedTypeSymbol Type { get; }
         public ImmutableArray<INamedTypeSymbol> Interfaces { get; }
         public bool Singleton { get; }
+        public bool Scoped { get; }
         public BooleanInjection? BooleanInjection { get; }
         private ISymbol? Lambda { get; }
         private string LazyName => "m_" + Name.Replace("()", "");
         public string Name => SymbolUtility.MemberName(Type).Replace("()", "") + (Lambda is not null ? Lambda.Name : string.Empty) + "()";
         public bool Disposable { get; }
 
-        public string Declaration(ImmutableArray<INamedTypeSymbol> availableParameters)
+        public string Declaration(ImmutableArray<INamedTypeSymbol> availableParameters, bool forLifetimeScope)
         {
             var creationCall = CreationCall(availableParameters);
-            return Singleton ? SymbolUtility.SingletonFactory(Type, Name, LazyName, creationCall, Disposable) : Disposable ? SymbolUtility.DisposableFactory(Type, Name, creationCall) : $"private {Type} {Name} => {creationCall};";
+            if (forLifetimeScope && Singleton)
+            {
+                return $"internal {Type} {Name} => m_fallback.{Name};";
+            }
+
+            return (Singleton || Scoped) ? SymbolUtility.SingletonFactory(Type, Name, LazyName, creationCall, Disposable) :
+                   Disposable ? SymbolUtility.DisposableFactory(Type, Name, creationCall) : $"internal {Type} {Name} => {creationCall};";
         }
 
         public string DisposeCall => LazyName + "?.Dispose();";
@@ -94,6 +101,7 @@ namespace FactoryGenerator
                     parameters.Add(parameter.Name);
                     continue;
                 }
+
                 parameters.Add(SymbolUtility.MemberName(parameter.Type));
             }
 
@@ -135,7 +143,7 @@ namespace FactoryGenerator
         private Injection(INamedTypeSymbol type, ImmutableArray<INamedTypeSymbol> interfaces,
                           bool singleton,
                           bool disposable,
-                          BooleanInjection? booleanInjection, ISymbol? lambda)
+                          BooleanInjection? booleanInjection, ISymbol? lambda, bool scoped)
         {
             Type = type;
             Interfaces = interfaces;
@@ -143,6 +151,7 @@ namespace FactoryGenerator
             Disposable = disposable;
             BooleanInjection = booleanInjection;
             Lambda = lambda;
+            Scoped = scoped;
         }
 
 
@@ -177,15 +186,13 @@ namespace FactoryGenerator
 
             var singleInstance = false;
             var acquireChildInterfaces = false;
-            var asSelf = false;
-            if(namedTypeSymbol.Interfaces.Length == 0)
-            {
-                asSelf = true;
-            }
+            var asSelf = namedTypeSymbol.Interfaces.Length == 0;
+            var scoped = false;
             if (namedTypeSymbol.TypeKind == TypeKind.Interface)
             {
                 asSelf = true;
             }
+
             BooleanInjection? boolean = null;
             HashSet<INamedTypeSymbol> attributedInterfaces = new(SymbolEqualityComparer.Default);
             HashSet<INamedTypeSymbol> preventedInterfaces = new(SymbolEqualityComparer.Default);
@@ -221,6 +228,9 @@ namespace FactoryGenerator
                     case "BooleanAttribute":
                         boolean = HandleBoolean(attributeData);
                         break;
+                    case "ScopedAttribute":
+                        scoped = true;
+                        break;
                     default:
                         continue;
                 }
@@ -244,7 +254,7 @@ namespace FactoryGenerator
             interfaces = interfaces.RemoveRange(preventedInterfaces).Distinct(SymbolEqualityComparer.Default).Cast<INamedTypeSymbol>().ToImmutableArray();
 
 
-            return new Injection(namedTypeSymbol, interfaces, singleInstance, isDisposable, boolean, lambda);
+            return new Injection(namedTypeSymbol, interfaces, singleInstance, isDisposable, boolean, lambda, scoped);
         }
 
         private static BooleanInjection? HandleBoolean(AttributeData attributeData)

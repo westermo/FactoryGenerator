@@ -14,11 +14,11 @@ namespace FactoryGenerator
                 switch (namespaceOrTypeSymbol)
                 {
                     case INamespaceSymbol @namespace:
-                        {
-                            foreach (var nested in GetAllTypes(@namespace))
-                                yield return nested;
-                            break;
-                        }
+                    {
+                        foreach (var nested in GetAllTypes(@namespace))
+                            yield return nested;
+                        break;
+                    }
                     case INamedTypeSymbol type:
 
                         foreach (var nested in GetAllTypes(type))
@@ -28,6 +28,7 @@ namespace FactoryGenerator
                 }
             }
         }
+
         public static IEnumerable<INamedTypeSymbol> GetAllTypes(INamedTypeSymbol root)
         {
             foreach (var namespaceOrTypeSymbol in root.GetMembers())
@@ -35,11 +36,11 @@ namespace FactoryGenerator
                 switch (namespaceOrTypeSymbol)
                 {
                     case INamespaceSymbol @namespace:
-                        {
-                            foreach (var nested in GetAllTypes(@namespace))
-                                yield return nested;
-                            break;
-                        }
+                    {
+                        foreach (var nested in GetAllTypes(@namespace))
+                            yield return nested;
+                        break;
+                    }
                     case INamedTypeSymbol type:
 
                         foreach (var nested in GetAllTypes(type))
@@ -49,6 +50,7 @@ namespace FactoryGenerator
                 }
             }
         }
+
         internal static bool IsEnumerable(ITypeSymbol symbol)
         {
             return symbol.Name.Contains("IEnumerable") || ImplementsInterface(symbol, "IEnumerable");
@@ -76,9 +78,8 @@ namespace FactoryGenerator
         {
             if (disposable)
             {
-
                 return $@"
-    private {type} {name}
+    internal {type} {name}
     {{
         if ({lazyName} != null)
             return {lazyName};
@@ -92,11 +93,11 @@ namespace FactoryGenerator
             return {lazyName} = value;
         }}
     }} 
-    private {type}? {lazyName};";
+    internal {type}? {lazyName};";
             }
 
             return $@"
-    private {type} {name}
+    internal {type} {name}
     {{
         if ({lazyName} != null)
             return {lazyName};
@@ -108,19 +109,18 @@ namespace FactoryGenerator
             return {lazyName} = {creation};
         }}
     }} 
-    private {type}? {lazyName};";
+    internal {type}? {lazyName};";
         }
 
         internal static string DisposableFactory(INamedTypeSymbol type, string name, string creationCall)
         {
             return $@"
-    private {type} {name}
+    internal {type} {name}
     {{    
         var value = {creationCall};
         resolvedInstances.Add(new WeakReference<IDisposable>(value));
         return value;
     }}";
         }
-
     }
 }
