@@ -133,6 +133,38 @@ public class InjectionDetectionTests()
     }
 
     [Fact]
+    public void DisposingLifetimeContainerDoesNotDisposeSingletons()
+    {
+        ISingletonDisposer singleton;
+        using (var myContainer = new DependencyInjectionContainer(false, default, default!))
+        {
+            using (var lifetime = myContainer.BeginLifetimeScope())
+            {
+                singleton = lifetime.Resolve<ISingletonDisposer>();
+            }
+
+            singleton.ShouldBeOfType<DisposableSingleton>();
+            ((DisposableSingleton) singleton).WasDisposed.ShouldBeFalse();
+        }
+
+        ((DisposableSingleton) singleton).WasDisposed.ShouldBeTrue();
+    }
+
+    [Fact]
+    public void DisposingLifetimeContainerDisposesScoped()
+    {
+        IScoped singleton;
+        using var myContainer = new DependencyInjectionContainer(false, default, default!);
+        using (var lifetime = myContainer.BeginLifetimeScope())
+        {
+            singleton = lifetime.Resolve<IScoped>();
+        }
+
+        singleton.ShouldBeOfType<Scoped>();
+        singleton.WasDisposed.ShouldBeTrue();
+    }
+
+    [Fact]
     public void DisposingContainerDoesNotDisposeUntrackedInstances()
     {
         IDisposer singleton;
@@ -161,23 +193,27 @@ public class InjectionDetectionTests()
     {
         Program.Method().Count().ShouldBe(3);
     }
+
     [Fact]
     public void BooleanFallbackIsOverriden()
     {
         m_container.Resolve<IOverrideBoolean>().ShouldBeOfType<OverridingBoolean>();
     }
+
     [Fact]
     public void TryResolveWithTypeArgumentsWorks()
     {
         m_container.TryResolve<IType>(out var type).ShouldBeTrue();
         type.ShouldBeOfType<Type>();
     }
+
     [Fact]
     public void TryResolveWithTypeParameterWorks()
     {
         m_container.TryResolve(typeof(IType), out var type).ShouldBeTrue();
         type.ShouldBeOfType<Type>();
     }
+
     [Fact]
     public void ClassesInsideOtherClassesCanBeInjected()
     {
