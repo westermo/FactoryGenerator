@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.IO;
 using System.Linq;
 using System.Threading;
 using Microsoft.CodeAnalysis;
@@ -199,7 +200,9 @@ namespace FactoryGenerator
             foreach (var attributeData in attributes)
             {
                 token.ThrowIfCancellationRequested();
-                var name = attributeData.AttributeClass!.Name;
+                var name = attributeData.AttributeClass!.ToString();
+                if (!name.StartsWith("FactoryGenerator.Attributes")) continue;
+                name = attributeData.AttributeClass.Name;
                 switch (name)
                 {
                     case "SingletonAttribute":

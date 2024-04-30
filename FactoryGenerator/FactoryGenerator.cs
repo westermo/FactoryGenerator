@@ -97,7 +97,7 @@ namespace FactoryGenerator
                 if (type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Interface) continue;
                 var typeAttributes = type.GetAttributes().Concat(type.AllInterfaces.SelectMany(i => i.GetAttributes()))
                                          .ToImmutableArray();
-                if (typeAttributes.Any(attribute => attribute.AttributeClass?.Name.Contains("Inject") != false))
+                if (typeAttributes.Any(IsInjection))
                 {
                     var info = Injection.Create(type, typeAttributes, token);
                     if (info is not null) yield return info;
@@ -107,7 +107,7 @@ namespace FactoryGenerator
                                            .Where(method => method.DeclaredAccessibility == Accessibility.Public))
                 {
                     var attributes = method.GetAttributes();
-                    if (!attributes.Any(attribute => attribute.AttributeClass?.Name.Contains("Inject") != false))
+                    if (!attributes.Any(IsInjection))
                         continue;
                     var info = Injection.Create(method, attributes, token);
                     if (info is not null) yield return info;
@@ -117,11 +117,16 @@ namespace FactoryGenerator
                                              .Where(property => property.DeclaredAccessibility == Accessibility.Public))
                 {
                     var attributes = property.GetAttributes();
-                    if (!attributes.Any(attribute => attribute.AttributeClass?.Name.Contains("Inject") != false))
+                    if (!attributes.Any(IsInjection))
                         continue;
                     var info = Injection.Create(property, attributes, token);
                     if (info is not null) yield return info;
                 }
+            }
+
+            bool IsInjection(AttributeData attribute)
+            {
+                return attribute.AttributeClass?.Name.Contains("Inject") == true && attribute.AttributeClass.ToString().StartsWith("FactoryGenerator.Attributes");
             }
         }
 
@@ -360,11 +365,14 @@ public sealed partial class {ClassName} : IContainer
             var parameters = constructorParameters.OrderBy(p => p.Type.ToString()).Select(p => $"{p.Name}")
                                                   .Distinct();
             allArguments.AddRange(arguments);
+            var lifetimeArguments = allArguments.ToList();
             allParameters.AddRange(parameters);
 
             var constructor = "(" + string.Join(", ", allArguments) + ")";
-            var lifetimeConstructor = "(" + $"{ClassName} fallback, " + string.Join(", ", allArguments) + ")";
-            var lifetimeParameters = "this, " + string.Join(", ", allParameters);
+            lifetimeArguments.Insert(0, $"{ClassName} fallback");
+            allParameters.Insert(0, "this");
+            var lifetimeConstructor = "(" + string.Join(", ", lifetimeArguments) + ")";
+            var lifetimeParameters = string.Join(", ", allParameters);
 
             log.Log(LogLevel.Debug, $"Resulting Constructor: {constructor}");
             var constructorFields = string.Join("\n\t", allArguments.Select(arg => arg + ";"));
@@ -386,7 +394,9 @@ public sealed partial class LifetimeScope : IContainer
 {{
     public ILifetimeScope BeginLifetimeScope()
     {{
-        return m_fallback.BeginLifetimeScope();
+        var scope = m_fallback.BeginLifetimeScope();
+        resolvedInstances.Add(new WeakReference<IDisposable>(scope));
+        return scope;
     }}
     private object m_lock = new();
     private {ClassName} m_fallback;
@@ -512,7 +522,9 @@ public sealed partial class LifetimeScope : IContainer
                                             ? $@"
 public ILifetimeScope BeginLifetimeScope()
 {{
-    return new {LifetimeName}({lifetimeParameters});
+    var scope = new {LifetimeName}({lifetimeParameters});
+    resolvedInstances.Add(new WeakReference<IDisposable>(scope));
+    return scope;
 }}"
                                             : string.Empty;
             var extraConstruction = addLifetimeScopeFunction ? string.Empty : "m_fallback = fallback;";

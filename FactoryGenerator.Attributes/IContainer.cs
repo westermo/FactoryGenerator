@@ -16,9 +16,9 @@ public interface ILifetimeScope : IDisposable
 
     bool IsRegistered(Type type) => TryResolve(type, out _);
     bool IsRegistered<T>() => IsRegistered(typeof(T));
+    public ILifetimeScope BeginLifetimeScope();
 }
 
 public interface IContainer : ILifetimeScope
 {
-    public ILifetimeScope BeginLifetimeScope();
 }
