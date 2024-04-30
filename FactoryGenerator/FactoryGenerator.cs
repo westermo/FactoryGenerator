@@ -468,6 +468,8 @@ public sealed partial class LifetimeScope : IContainer
             var tree = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
             foreach (var injection in dataInjections)
             {
+                //Methods can sort themselves out, and may include logic that makes it unsuitable to cycle-detect.
+                if(injection.Lambda != null) continue;
                 var node = new List<INamedTypeSymbol>();
                 foreach (var iface in injection.Interfaces)
                 {

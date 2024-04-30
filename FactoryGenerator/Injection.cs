@@ -15,7 +15,7 @@ namespace FactoryGenerator
         public bool Singleton { get; }
         public bool Scoped { get; }
         public BooleanInjection? BooleanInjection { get; }
-        private ISymbol? Lambda { get; }
+        public ISymbol? Lambda { get; }
         private string LazyName => "m_" + Name.Replace("()", "");
         public string Name => SymbolUtility.MemberName(Type).Replace("()", "") + (Lambda is not null ? Lambda.Name : string.Empty) + "()";
         public bool Disposable { get; }

@@ -156,6 +156,28 @@ public interface IScoped
     bool WasDisposed { get; }
 }
 
+public interface ISelfish;
+
+public interface ISelfReferentialFactory
+{
+    [Inject]
+    public SelfReferential Create();
+}
+
+[Inject]
+public class SelfReferentialFactory : ISelfReferentialFactory
+{
+    public SelfReferential Create()
+    {
+        return new SelfReferential([]);
+    }
+}
+
+public class SelfReferential(IEnumerable<ISelfish> references) : ISelfish
+{
+    public IEnumerable<ISelfish> References { get; } = references;
+}
+
 [Inject, Scoped]
 public class Scoped : IDisposable, IScoped
 {
