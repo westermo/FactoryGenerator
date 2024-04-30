@@ -209,6 +209,11 @@ public sealed partial class {ClassName} : IContainer
         resolved = default;
         return false;
     }}
+    public bool IsRegistered(Type type)
+    {{
+        return m_lookup.ContainsKey(type);
+    }}
+    public bool IsRegistered<T>() => IsRegistered(typeof(T));
 }}";
 
             var booleans = dataInjections.Select(inj => inj.BooleanInjection).Where(b => b is not null)
@@ -452,6 +457,11 @@ public sealed partial class LifetimeScope : IContainer
         resolved = default;
         return false;
     }}
+    public bool IsRegistered(Type type)
+    {{
+        return m_lookup.ContainsKey(type);
+    }}
+    public bool IsRegistered<T>() => IsRegistered(typeof(T));
 }}
 ";
             yield return Constructor(usingStatements, constructorFields,
@@ -469,7 +479,7 @@ public sealed partial class LifetimeScope : IContainer
             foreach (var injection in dataInjections)
             {
                 //Methods can sort themselves out, and may include logic that makes it unsuitable to cycle-detect.
-                if(injection.Lambda != null) continue;
+                if (injection.Lambda != null) continue;
                 var node = new List<INamedTypeSymbol>();
                 foreach (var iface in injection.Interfaces)
                 {
