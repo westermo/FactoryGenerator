@@ -7,6 +7,8 @@ using Inheritor.Generated;
 
 namespace Benchmarks;
 
+[JsonExporterAttribute.Full]
+[JsonExporterAttribute.FullCompressed]
 public class ResolveBenchmarks
 {
     private readonly IContainer m_container = new DependencyInjectionContainer(default, default, default!);
