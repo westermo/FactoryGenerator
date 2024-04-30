@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1714467820747,
+  "lastUpdate": 1714468160972,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -54,6 +54,60 @@ window.BENCHMARK_DATA = {
             "value": 954.1363311180702,
             "unit": "ns",
             "range": "± 8.329441718655918"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "57943a16c1f1f799a47b4b03bb01057aefefeed8",
+          "message": "Merge pull request #14 from westermo/support-netstandard\n\nMove to netstandard 2.0",
+          "timestamp": "2024-04-30T11:07:23+02:00",
+          "tree_id": "b9b994defce54d5e481ec68ffb92834878b9a11a",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/57943a16c1f1f799a47b4b03bb01057aefefeed8"
+        },
+        "date": 1714468160585,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 135.57445757729667,
+            "unit": "ns",
+            "range": "± 0.9292594534452475"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 26.348994531801768,
+            "unit": "ns",
+            "range": "± 0.22476358238827698"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 20.338140648144943,
+            "unit": "ns",
+            "range": "± 0.05486431414953504"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 30.03070642856451,
+            "unit": "ns",
+            "range": "± 0.22286513357095514"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 943.090672492981,
+            "unit": "ns",
+            "range": "± 6.0077461667096745"
           }
         ]
       }
