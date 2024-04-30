@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+    <PropertyGroup>
+        <TargetFramework>net8.0</TargetFramework>
+        <Nullable>enable</Nullable>
+        <ImplicitUsings>enable</ImplicitUsings>
+        <InvariantGlobalization>true</InvariantGlobalization>
+        <PublishAot>true</PublishAot>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="..\..\FactoryGenerator.Attributes\FactoryGenerator.Attributes.csproj"/>
+        <ProjectReference Include="..\..\FactoryGenerator.Extensions.DependencyInjection\FactoryGenerator.Extensions.DependencyInjection.csproj" />
+        <ProjectReference Include="..\..\FactoryGenerator\FactoryGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
+    </ItemGroup>
+
+</Project>

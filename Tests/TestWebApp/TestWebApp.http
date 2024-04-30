@@ -1,0 +1,6 @@
+@TestWebApp_HostAddress = http://localhost:5263
+
+GET {{TestWebApp_HostAddress}}/lol/
+Accept: application/json
+
+###
