@@ -99,15 +99,16 @@ Of note is perhaps `Generated.DependencyInjectionContainer`, this is the Compile
 
 ### Attributes
 
-| Attribute                 |                                                                  Description                                                                   |     Requires |
-|:--------------------------|:----------------------------------------------------------------------------------------------------------------------------------------------:|-------------:|
-| ```Inject```              |                           Adds any interface directly listed by the type or Method-return-type to the IoC container                            |              |
-| ```As<T>```               |      Explicitly inject the type which holds this attribute as the type specified, <br/>in addition to its directly implemented interfaces      | ```Inject``` |
-| ```ExceptAs<T>```         |                                    Do not inject the type which holds this attribute as the type specified                                     | ```Inject``` |
-| ```InheritInterfaces```   |                                              Also includes any interfaces that the type inherits                                               | ```Inject``` |
-| ```Self```                |                                                     Also include the type itself directly.                                                     | ```Inject``` |
-| ```Singleton```           |      Ensures that this type will be resolved exactly once,<br/>and any subsequent resolves of the same type will return the same instance      | ```Inject``` |
-| ```Boolean(string key)``` | Creates a Runtime switch to decide whether this type should be the one that gets resolved<br/>(or the best fitting fallback option, otherwise) | ```Inject``` |
+| Attribute                 |                                                                  Description                                                                          |     Requires |
+|:--------------------------|:-----------------------------------------------------------------------------------------------------------------------------------------------------:|-------------:|
+| ```Inject```              |                           Adds any interface directly listed by the type or Method-return-type to the IoC container                                   |              |
+| ```As<T>```               |      Explicitly inject the type which holds this attribute as the type specified, <br/>in addition to its directly implemented interfaces             | ```Inject``` |
+| ```ExceptAs<T>```         |                                    Do not inject the type which holds this attribute as the type specified                                            | ```Inject``` |
+| ```InheritInterfaces```   |                                              Also includes any interfaces that the type inherits                                                      | ```Inject``` |
+| ```Self```                |                                                     Also include the type itself directly.                                                            | ```Inject``` |
+| ```Singleton```           |      Ensures that this type will be resolved exactly once,<br/>and any subsequent resolves of the same type will return the same instance             | ```Inject``` |
+| ```Scoped```              |      Ensures that this type will be resolved once per created scope, if you do not use IContainer.BeginLifetimeScope(), this behaves like a singleton | ```Inject``` |
+| ```Boolean(string key)``` | Creates a Runtime switch to decide whether this type should be the one that gets resolved<br/>(or the best fitting fallback option, otherwise)        | ```Inject``` |
 
 ### Overriding
 
@@ -131,7 +132,7 @@ public class SomeClass(CommandLineOptions options, IInjectedInterface injected, 
 }
 ```
 Here, `CommandLineOptions` is a class created by an imaginary `Main` method at the start of the program, and not an option for compile-time injection.
-Thus, if you were do have an injected class like this, you would find that the `new Generated.DependencyInjectionContainer()` looks a little different.
+Thus, if you were to have an injected class like this, you would find that the `new Generated.DependencyInjectionContainer()` looks a little different.
 
 Specifically, the constructor for `DependencyInjectionContainer` will now look something like this:
 ```csharp
