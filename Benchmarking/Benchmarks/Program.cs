@@ -26,6 +26,9 @@ public class ResolveBenchmarks
     public IOverridable ResolveTransient() => m_container.Resolve<IOverridable>();
 
     [Benchmark]
+    public IEnumerable<IRequestedArray> ResolveArray() => m_container.Resolve<IEnumerable<IRequestedArray>>();
+
+    [Benchmark]
     public IContainer Create() => new DependencyInjectionContainer(default, default, default!);
 }
 
