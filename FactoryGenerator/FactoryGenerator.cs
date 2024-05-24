@@ -145,6 +145,7 @@ namespace FactoryGenerator
             log.Log(LogLevel.Debug, "Starting Code Generation");
             var usingStatements = $@"
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using FactoryGenerator;
 using System.CodeDom.Compiler;
@@ -591,8 +592,9 @@ public partial class {className}
                 factory = @$"
     {type}[] {factoryName}
     {{
-        List<{type}> source = {{ 
-            {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} }};
+        List<{type}> source = new List<{type> {{ 
+            {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} 
+        }};
         {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null)
                                            .Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
         return source.ToArray();
