@@ -592,7 +592,7 @@ public partial class {className}
                 factory = @$"
     {type}[] {factoryName}
     {{
-        List<{type}> source = new List<{type> {{ 
+        List<{type}> source = new List<{type}> {{ 
             {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} 
         }};
         {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null).Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
