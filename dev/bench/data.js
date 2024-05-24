@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1716289255795,
+  "lastUpdate": 1716553037623,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -162,6 +162,66 @@ window.BENCHMARK_DATA = {
             "value": 950.1550153096517,
             "unit": "ns",
             "range": "± 3.5838584142589216"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "ae7bd8627637e95c91481be9e48925abc5c8918b",
+          "message": "Merge pull request #17 from westermo/feature/support-old-syntax\n\nMoved to using old syntax for Array creation to support older .net versions",
+          "timestamp": "2024-05-24T14:14:43+02:00",
+          "tree_id": "553b334d57b3462bd57c7e00f27a05db6da5eb15",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/ae7bd8627637e95c91481be9e48925abc5c8918b"
+        },
+        "date": 1716553037065,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 130.61430668830872,
+            "unit": "ns",
+            "range": "± 0.3383865009984717"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 20.690218623479208,
+            "unit": "ns",
+            "range": "± 0.12372384901182724"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 20.043299474886485,
+            "unit": "ns",
+            "range": "± 0.12072136470236158"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 24.71256588101387,
+            "unit": "ns",
+            "range": "± 0.11094194392807046"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveArray",
+            "value": 21.557261345287163,
+            "unit": "ns",
+            "range": "± 0.12704588942875444"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 957.406155858721,
+            "unit": "ns",
+            "range": "± 10.426839010072053"
           }
         ]
       }
