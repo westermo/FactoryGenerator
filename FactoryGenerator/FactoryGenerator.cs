@@ -590,20 +590,20 @@ public partial class {className}
             {
                 factoryName = $"Create{name}()".Replace("_", "");
                 factory = @$"
-    {type}[] {factoryName}
+    IEnumerable<{type}> {factoryName}
     {{
         List<{type}> source = new List<{type}> {{ 
             {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} 
         }};
         {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null).Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
-        return source.ToArray();
+        return source;
     }}";
             }
 
             if (function)
             {
                 declarations[name] = $@"
-    internal {type}[] {name}()
+    internal IEnumerable<{type}> {name}()
     {{
         if (m_{name} != null)
             return m_{name};
@@ -615,12 +615,12 @@ public partial class {className}
             return m_{name} = {factoryName};
         }}
     }} 
-    internal {type}[]? m_{name};" + factory;
+    internal IEnumerable<{type}>? m_{name};" + factory;
             }
             else
             {
                 declarations[name] = $@"
-    internal {type}[] {name}
+    internal IEnumerable<{type}> {name}
     {{
         get
         {{
@@ -635,7 +635,7 @@ public partial class {className}
             }}
         }}
     }} 
-    internal {type}[]? m_{name};" + factory;
+    internal IEnumerable<{type}>? m_{name};" + factory;
             }
         }
 

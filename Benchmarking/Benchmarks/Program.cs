@@ -1,4 +1,5 @@
 ﻿using BenchmarkDotNet.Attributes;
+using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Running;
 using FactoryGenerator;
 using Inherited;
@@ -26,7 +27,7 @@ public class ResolveBenchmarks
     public IOverridable ResolveTransient() => m_container.Resolve<IOverridable>();
 
     [Benchmark]
-    public IEnumerable<IRequestedArray> ResolveArray() => m_container.Resolve<IEnumerable<IRequestedArray>>();
+    public List<IRequestedArray> ResolveArray() => (List<IRequestedArray>) m_container.Resolve<IEnumerable<IRequestedArray>>();
 
     [Benchmark]
     public IContainer Create() => new DependencyInjectionContainer(default, default, default!);
