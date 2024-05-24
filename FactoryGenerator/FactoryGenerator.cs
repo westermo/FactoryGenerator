@@ -591,10 +591,11 @@ public partial class {className}
                 factory = @$"
     {type}[] {factoryName}
     {{
-        {type}[] source = [{string.Join(", ", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))}];
+        List<{type}> source = {{ 
+            {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} }};
         {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null)
-                                           .Select(i => $"if({i.BooleanInjection!.Key}) source = [..source, {i.Name}];"))}
-        return source;
+                                           .Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
+        return source.ToArray();
     }}";
             }
 
