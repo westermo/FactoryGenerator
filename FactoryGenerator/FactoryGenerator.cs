@@ -584,7 +584,7 @@ public partial class {className}
         private static void MakeArray(Dictionary<string, string> declarations, string name, INamedTypeSymbol type,
                                       Dictionary<INamedTypeSymbol, List<Injection>> interfaceInjectors, bool function = false)
         {
-            var factoryName = "[]";
+            var factoryName = $"new {type}[0]";
             var factory = string.Empty;
             if (interfaceInjectors.TryGetValue(type, out var injections))
             {
@@ -595,8 +595,7 @@ public partial class {className}
         List<{type}> source = new List<{type> {{ 
             {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} 
         }};
-        {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null)
-                                           .Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
+        {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null).Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
         return source.ToArray();
     }}";
             }
