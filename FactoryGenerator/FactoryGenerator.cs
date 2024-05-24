@@ -145,6 +145,7 @@ namespace FactoryGenerator
             log.Log(LogLevel.Debug, "Starting Code Generation");
             var usingStatements = $@"
 using System;
+using System.Linq;
 using System.Collections.Generic;
 using FactoryGenerator;
 using System.CodeDom.Compiler;
@@ -583,17 +584,18 @@ public partial class {className}
         private static void MakeArray(Dictionary<string, string> declarations, string name, INamedTypeSymbol type,
                                       Dictionary<INamedTypeSymbol, List<Injection>> interfaceInjectors, bool function = false)
         {
-            var factoryName = "[]";
+            var factoryName = $"new {type}[0]";
             var factory = string.Empty;
             if (interfaceInjectors.TryGetValue(type, out var injections))
             {
                 factoryName = $"Create{name}()".Replace("_", "");
                 factory = @$"
-    {type}[] {factoryName}
+    IEnumerable<{type}> {factoryName}
     {{
-        {type}[] source = [{string.Join(", ", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))}];
-        {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null)
-                                           .Select(i => $"if({i.BooleanInjection!.Key}) source = [..source, {i.Name}];"))}
+        List<{type}> source = new List<{type}> {{ 
+            {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} 
+        }};
+        {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null).Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
         return source;
     }}";
             }
@@ -601,7 +603,7 @@ public partial class {className}
             if (function)
             {
                 declarations[name] = $@"
-    internal {type}[] {name}()
+    internal IEnumerable<{type}> {name}()
     {{
         if (m_{name} != null)
             return m_{name};
@@ -613,12 +615,12 @@ public partial class {className}
             return m_{name} = {factoryName};
         }}
     }} 
-    internal {type}[]? m_{name};" + factory;
+    internal IEnumerable<{type}>? m_{name};" + factory;
             }
             else
             {
                 declarations[name] = $@"
-    internal {type}[] {name}
+    internal IEnumerable<{type}> {name}
     {{
         get
         {{
@@ -633,7 +635,7 @@ public partial class {className}
             }}
         }}
     }} 
-    internal {type}[]? m_{name};" + factory;
+    internal IEnumerable<{type}>? m_{name};" + factory;
             }
         }
 
