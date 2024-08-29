@@ -1,14 +1,16 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
     <ItemGroup>
-        <ProjectReference Include="..\..\..\FactoryGenerator\FactoryGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false"/>
-        <ProjectReference Include="..\Inherited\Inherited.csproj"/>
-        <CompilerVisibleProperty Include="FactoryGenerator_LogLevel"/>
-        <CompilerVisibleProperty Include="FactoryGenerator_FileName"/>
+        <ProjectReference Include="..\..\..\FactoryGenerator\FactoryGenerator.csproj"
+            OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="..\Inherited\Inherited.csproj" />
+        <CompilerVisibleProperty Include="FactoryGenerator_LogLevel" />
+        <CompilerVisibleProperty Include="FactoryGenerator_FileName" />
     </ItemGroup>
 
     <PropertyGroup>
         <TargetFramework>net8.0</TargetFramework>
+        <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
