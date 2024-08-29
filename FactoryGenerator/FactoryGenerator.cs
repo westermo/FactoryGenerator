@@ -661,7 +661,7 @@ public partial class {className}
                 factory = @$"
     IEnumerable<{type}> {factoryName}
     {{
-        if(Reentrant) return [];
+        if(Reentrant) return Array.Empty<{type}>();
         Reentrant = true;
         List<{type}> source = new List<{type}> {{ 
             {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} 

@@ -219,4 +219,11 @@ public class InjectionDetectionTests()
     {
         m_container.Resolve<Containing.Containee>();
     }
+    [Fact]
+    public void ContainerMayCreateItself()
+    {
+        var newContainer = new DependencyInjectionContainer(m_container);
+        var resolved = m_container.Resolve<IEnumerable<IArray>>();
+        resolved.Count().ShouldBe(6);
+    }
 }

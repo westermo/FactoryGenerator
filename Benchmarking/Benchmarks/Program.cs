@@ -31,6 +31,9 @@ public class ResolveBenchmarks
 
     [Benchmark]
     public IContainer Create() => new DependencyInjectionContainer(default, default, default!);
+
+    [Benchmark]
+    public IContainer CreateFromSelf() => new DependencyInjectionContainer(m_container);
 }
 
 internal static class Program
