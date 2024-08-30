@@ -19,4 +19,6 @@ public interface ILifetimeScope : IDisposable
 
 public interface IContainer : ILifetimeScope
 {
+    IContainer? Base { get; }
+    IContainer? Inheritor { get; set; }
 }

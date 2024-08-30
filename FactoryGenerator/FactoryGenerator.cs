@@ -154,22 +154,43 @@ namespace {compilation.Assembly.Name}.Generated;
 
             yield return $@"{usingStatements}
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
-#nullable disable
+#nullable enable
 public sealed partial class {ClassName} : IContainer
 {{
+    
+    bool Reentrant = false;
+    private IContainer GetRoot()
+    {{
+        IContainer root = this;
+        while(root.Base != null)
+        {{
+            root = root.Base;
+        }}
+        return root;
+    }}
+    private IContainer GetTop()
+    {{
+        IContainer top = this;
+        while(top.Inheritor != null)
+        {{
+            top = top.Inheritor;
+        }}
+        return top;
+    }}
+    public IContainer? Base {{ get; }}
+    public IContainer? Inheritor {{ get; set; }}
     private object m_lock = new();
     private Dictionary<Type,Func<object>> m_lookup;
     private readonly List<WeakReference<IDisposable>> resolvedInstances = new();
 
     public T Resolve<T>()
     {{
-        return (T)Resolve(typeof(T));
+        return TryResolve<T>(out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{typeof(T)}} has not been registered, and thus cannot be resolved"");
     }}
 
     public object Resolve(Type type)
     {{
-        var instance = m_lookup[type]();
-        return instance;
+        return TryResolve(type, out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{type}} has not been registered, and thus cannot be resolved"");
     }}
 
     public void Dispose()
@@ -182,22 +203,28 @@ public sealed partial class {ClassName} : IContainer
             }}
         }}
         resolvedInstances.Clear();
+        Base?.Dispose();
     }}
 
-    public bool TryResolve(Type type, out object resolved)
+    public bool TryResolve(Type type, out object? resolved)
     {{
+        resolved = default;
         if(m_lookup.TryGetValue(type, out var factory))
         {{
             resolved = factory();
             return true;
         }}
-        resolved = default;
+        if(Base is not null)
+        {{
+            return Base.TryResolve(type, out resolved);
+        }}
         return false;
     }}
 
 
-    public bool TryResolve<T>(out T resolved)
+    public bool TryResolve<T>(out T? resolved)
     {{
+        resolved = default;
         if(m_lookup.TryGetValue(typeof(T), out var factory))
         {{
             var value = factory();
@@ -207,12 +234,15 @@ public sealed partial class {ClassName} : IContainer
                 return true;
             }}
         }}
-        resolved = default;
+        if(Base is not null)
+        {{
+            return Base.TryResolve<T>(out resolved);
+        }}
         return false;
     }}
     public bool IsRegistered(Type type)
     {{
-        return m_lookup.ContainsKey(type);
+        return m_lookup.ContainsKey(type) ? true : Base?.IsRegistered(type) == true;
     }}
     public bool IsRegistered<T>() => IsRegistered(typeof(T));
 }}";
@@ -220,6 +250,7 @@ public sealed partial class {ClassName} : IContainer
             var booleans = dataInjections.Select(inj => inj.BooleanInjection).Where(b => b is not null)
                                          .Select(b => b!.Key).Distinct().ToArray();
             var allArguments = booleans.Select(b => $"bool {b}").ToList();
+            var justBooleans = allArguments.ToList();
             var allParameters = booleans.Select(b => $"{b}").ToList();
             var ordered = dataInjections.Reverse().ToList();
             //Put all test-overrides at the end
@@ -384,20 +415,45 @@ public sealed partial class {ClassName} : IContainer
             var constructorFields = string.Join("\n\t", allArguments.Select(arg => arg + ";"));
             var constructorAssignments = string.Join("\n\t\t",
                                                      allArguments.Select(arg => arg.Split(' ').Last()).Select(arg => $"this.{arg} = {arg};"));
+            var resolvedConstructorAssignments = string.Join("\n\t\t", allArguments.Select(a => a.Split(' ')).Where(a => a[0] != "bool").Select(a => $"this.{a[1]} = Base.Resolve<{a[0]}>();"));
             var dictSize = interfaceInjectors.Count + localizedParameters.Count + requested.Count +
+
                            constructorParameters.Count;
             yield return Constructor(usingStatements, constructorFields,
                                      constructor, constructorAssignments,
                                      dictSize, interfaceInjectors.Keys,
                                      localizedParameters, requested,
-                                     constructorParameters, true, ClassName, lifetimeParameters);
+                                     constructorParameters, true, ClassName, lifetimeParameters,
+                                     resolvingConstructorAssignments: resolvedConstructorAssignments);
             yield return Declarations(usingStatements, declarations, ClassName);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations, ClassName);
             yield return $@"{usingStatements}
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
-#nullable disable
+#nullable enable
 public sealed partial class LifetimeScope : IContainer
 {{
+    private bool Reentrant = false;
+    private IContainer GetRoot()
+    {{
+        IContainer root = this;
+        while(root.Base != null)
+        {{
+            root = root.Base;
+        }}
+        return root;
+    }}
+    private IContainer GetTop()
+    {{
+        IContainer top = this;
+        while(top.Inheritor != null)
+        {{
+            top = top.Inheritor;
+        }}
+        return top;
+    }}
+    
+    public IContainer? Base {{ get; }}
+    public IContainer? Inheritor {{ get; set; }}
     public ILifetimeScope BeginLifetimeScope()
     {{
         var scope = m_fallback.BeginLifetimeScope();
@@ -409,15 +465,14 @@ public sealed partial class LifetimeScope : IContainer
     private Dictionary<Type,Func<object>> m_lookup;
     private readonly List<WeakReference<IDisposable>> resolvedInstances = new();
 
-   public T Resolve<T>()
+    public T Resolve<T>()
     {{
-        return (T)Resolve(typeof(T));
+        return TryResolve<T>(out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{typeof(T)}} has not been registered, and thus cannot be resolved"");
     }}
 
     public object Resolve(Type type)
     {{
-        var instance = m_lookup[type]();
-        return instance;
+        return TryResolve(type, out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{type}} has not been registered, and thus cannot be resolved"");
     }}
 
     public void Dispose()
@@ -430,22 +485,28 @@ public sealed partial class LifetimeScope : IContainer
             }}
         }}
         resolvedInstances.Clear();
+        Base?.Dispose();
     }}
 
-    public bool TryResolve(Type type, out object resolved)
+    public bool TryResolve(Type type, out object? resolved)
     {{
+        resolved = default;
         if(m_lookup.TryGetValue(type, out var factory))
         {{
             resolved = factory();
             return true;
         }}
-        resolved = default;
+        else if(Base is not null)
+        {{
+            return Base.TryResolve(type, out resolved);
+        }}
         return false;
     }}
 
 
-    public bool TryResolve<T>(out T resolved)
+    public bool TryResolve<T>(out T? resolved)
     {{
+        resolved = default;
         if(m_lookup.TryGetValue(typeof(T), out var factory))
         {{
             var value = factory();
@@ -455,12 +516,15 @@ public sealed partial class LifetimeScope : IContainer
                 return true;
             }}
         }}
-        resolved = default;
+        else if(Base is not null)
+        {{
+            return Base.TryResolve<T>(out resolved);
+        }}
         return false;
     }}
     public bool IsRegistered(Type type)
     {{
-        return m_lookup.ContainsKey(type);
+        return m_lookup.ContainsKey(type) ? true : Base?.IsRegistered(type) == true;
     }}
     public bool IsRegistered<T>() => IsRegistered(typeof(T));
 }}
@@ -469,7 +533,8 @@ public sealed partial class LifetimeScope : IContainer
                                      lifetimeConstructor, constructorAssignments,
                                      dictSize, interfaceInjectors.Keys,
                                      localizedParameters, requested,
-                                     constructorParameters, false, LifetimeName);
+                                     constructorParameters, false, LifetimeName,
+                                     resolvingConstructorAssignments: resolvedConstructorAssignments, addMergingConstructor: false);
             yield return Declarations(usingStatements, scopedDeclarations, LifetimeName);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations, LifetimeName);
         }
@@ -513,7 +578,7 @@ public sealed partial class LifetimeScope : IContainer
                             }
                         }
 
-                        if (parameter.Type is not IArrayTypeSymbol {ElementType: INamedTypeSymbol arrType}) continue;
+                        if (parameter.Type is not IArrayTypeSymbol { ElementType: INamedTypeSymbol arrType }) continue;
                         {
                             node.Add(arrType);
                             if (!tree.TryGetValue(arrType, out var list)) continue;
@@ -529,7 +594,8 @@ public sealed partial class LifetimeScope : IContainer
 
         private static string Constructor(string usingStatements, string constructorFields, string constructor, string constructorAssignments, int dictSize,
                                           IEnumerable<INamedTypeSymbol> interfaceInjectors, List<IParameterSymbol> localizedParameters, List<INamedTypeSymbol> requested,
-                                          List<IParameterSymbol> constructorParameters, bool addLifetimeScopeFunction, string className, string? lifetimeParameters = null)
+                                          List<IParameterSymbol> constructorParameters, bool addLifetimeScopeFunction, string className, string? lifetimeParameters = null,
+                                          string? fromConstructor = null, string? resolvingConstructorAssignments = null, bool addMergingConstructor = true)
         {
             var lifetimeScopeFunction = addLifetimeScopeFunction
                                             ? $@"
@@ -538,8 +604,24 @@ public ILifetimeScope BeginLifetimeScope()
     var scope = new {LifetimeName}({lifetimeParameters});
     resolvedInstances.Add(new WeakReference<IDisposable>(scope));
     return scope;
-}}"
-                                            : string.Empty;
+}}" : string.Empty;
+
+            var mergingConstructor = addMergingConstructor ? $@"
+public {className}(IContainer Base{fromConstructor})
+{{
+    this.Base = Base;
+    Base.Inheritor = this;  
+    {resolvingConstructorAssignments}
+    
+    m_lookup = new({dictSize}) {{
+{MakeDictionary(interfaceInjectors)}
+{MakeDictionary(localizedParameters)}
+{MakeDictionary(requested)}
+{MakeDictionary(constructorParameters)}
+    }};
+}}" : string.Empty;
+
+
             var extraConstruction = addLifetimeScopeFunction ? string.Empty : "m_fallback = fallback;";
             return $@"{usingStatements}
 public partial class {className}
@@ -549,15 +631,15 @@ public partial class {className}
     {{
         {extraConstruction}
         {constructorAssignments}
-        m_lookup = new({dictSize})
-        {{
+        
+        m_lookup = new({dictSize})  {{
 {MakeDictionary(interfaceInjectors)}
 {MakeDictionary(localizedParameters)}
 {MakeDictionary(requested)}
 {MakeDictionary(constructorParameters)}
         }};
     }}
-
+    {mergingConstructor}
     {lifetimeScopeFunction}
 
 }}";
@@ -586,57 +668,53 @@ public partial class {className}
         {
             var factoryName = $"new {type}[0]";
             var factory = string.Empty;
+            var functionString = function ? "()" : string.Empty;
+            var starter = function ? string.Empty : "get {";
+            var ender = function ? string.Empty : "}";
             if (interfaceInjectors.TryGetValue(type, out var injections))
             {
                 factoryName = $"Create{name}()".Replace("_", "");
                 factory = @$"
     IEnumerable<{type}> {factoryName}
     {{
+        if(Reentrant) return Array.Empty<{type}>();
+        Reentrant = true;
         List<{type}> source = new List<{type}> {{ 
             {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} 
         }};
         {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null).Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
+        var b = Base;
+        while(b is not null)
+        {{
+            if(b.TryResolve<IEnumerable<{type}>>(out var additional)) source.AddRange(additional!);
+            b = b.Base;
+        }}
+        b = Inheritor;
+        while(b is not null)
+        {{
+            if(b.TryResolve<IEnumerable<{type}>>(out var additional)) source.AddRange(additional!);
+            b = b.Inheritor;
+        }}
+        Reentrant = false;
         return source;
     }}";
             }
-
-            if (function)
-            {
-                declarations[name] = $@"
-    internal IEnumerable<{type}> {name}()
+            declarations[name] = $@"
+    internal IEnumerable<{type}> {name}{functionString}
     {{
+        {starter}
         if (m_{name} != null)
             return m_{name};
-    
+
         lock (m_lock)
         {{
             if (m_{name} != null)
                 return m_{name};
             return m_{name} = {factoryName};
         }}
+        {ender}
     }} 
     internal IEnumerable<{type}>? m_{name};" + factory;
-            }
-            else
-            {
-                declarations[name] = $@"
-    internal IEnumerable<{type}> {name}
-    {{
-        get
-        {{
-            if (m_{name} != null)
-                return m_{name};
-        
-            lock (m_lock)
-            {{
-                if (m_{name} != null)
-                    return m_{name};
-                return m_{name} = {factoryName};
-            }}
-        }}
-    }} 
-    internal IEnumerable<{type}>? m_{name};" + factory;
-            }
         }
 
         private static string MakeDictionary(IEnumerable<INamedTypeSymbol> types)

@@ -219,4 +219,79 @@ public class InjectionDetectionTests()
     {
         m_container.Resolve<Containing.Containee>();
     }
+    [Fact]
+    public void ContainerMayCreateItself()
+    {
+        var newContainer = new DependencyInjectionContainer(m_container);
+        var resolved = m_container.Resolve<IEnumerable<IArray>>();
+        resolved.Count().ShouldBe(6);
+        var nonInjected = m_container.Resolve<Inherited.NonInjectedClass>();
+    }
+    [Fact]
+    public void HierarchicalContainersResolveArraysProperly()
+    {
+        var newContainer = new DependencyInjectionContainer(m_container);
+        newContainer.Resolve<ArrayConsumer>().Arrays.Count().ShouldBe(6);
+    }
+    [Fact]
+    public void HierarchicalContainersResolveUsesFallBackIfItCannotFindImplementation()
+    {
+        var newContainer = new DependencyInjectionContainer(new DummyContainer());
+        newContainer.Resolve<string>().ShouldBe(DummyContainer.DummyText);
+    }
+    private class DummyContainer : IContainer
+    {
+        public const string DummyText = "I am a bit of text";
+
+        public static NonInjectedClass m_dummy = new();
+        public IContainer? Base => null;
+
+        public IContainer? Inheritor { get; set; } = null;
+
+        public ILifetimeScope BeginLifetimeScope()
+        {
+            return this;
+        }
+
+        public void Dispose()
+        {
+        }
+
+        public bool IsRegistered(System.Type type)
+        {
+            return true;
+        }
+
+        public bool IsRegistered<T>()
+        {
+            return true;
+        }
+
+        public T Resolve<T>()
+        {
+            if (typeof(T) == typeof(string)) return (T) (object) DummyText;
+            return (T) (object) m_dummy;
+        }
+
+        public object Resolve(System.Type type)
+        {
+            if (type == typeof(string)) return DummyText;
+            return m_dummy;
+        }
+
+        public bool TryResolve(System.Type type, out object? resolved)
+        {
+            resolved = null;
+            if (type == typeof(string)) resolved = DummyText;
+            return resolved != null;
+        }
+
+        public bool TryResolve<T>(out T? resolved)
+        {
+            resolved = default;
+            if (typeof(T) == typeof(string)) resolved = (T) (object) DummyText;
+            return resolved != null;
+        }
+
+    }
 }
