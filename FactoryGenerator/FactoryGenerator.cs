@@ -185,13 +185,12 @@ public sealed partial class {ClassName} : IContainer
 
     public T Resolve<T>()
     {{
-        return (T)Resolve(typeof(T));
+        return TryResolve<T>(out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{typeof(T)}} has not been registered, and thus cannot be resolved"");
     }}
 
     public object Resolve(Type type)
     {{
-        var instance = m_lookup[type]();
-        return instance;
+        return TryResolve(type, out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{type}} has not been registered, and thus cannot be resolved"");
     }}
 
     public void Dispose()
@@ -204,22 +203,28 @@ public sealed partial class {ClassName} : IContainer
             }}
         }}
         resolvedInstances.Clear();
+        Base?.Dispose();
     }}
 
     public bool TryResolve(Type type, out object? resolved)
     {{
+        resolved = default;
         if(m_lookup.TryGetValue(type, out var factory))
         {{
             resolved = factory();
             return true;
         }}
-        resolved = default;
+        if(Base is not null)
+        {{
+            return Base.TryResolve(type, out resolved);
+        }}
         return false;
     }}
 
 
     public bool TryResolve<T>(out T? resolved)
     {{
+        resolved = default;
         if(m_lookup.TryGetValue(typeof(T), out var factory))
         {{
             var value = factory();
@@ -229,12 +234,15 @@ public sealed partial class {ClassName} : IContainer
                 return true;
             }}
         }}
-        resolved = default;
+        if(Base is not null)
+        {{
+            return Base.TryResolve<T>(out resolved);
+        }}
         return false;
     }}
     public bool IsRegistered(Type type)
     {{
-        return m_lookup.ContainsKey(type);
+        return m_lookup.ContainsKey(type) ? true : Base?.IsRegistered(type) == true;
     }}
     public bool IsRegistered<T>() => IsRegistered(typeof(T));
 }}";
@@ -457,15 +465,14 @@ public sealed partial class LifetimeScope : IContainer
     private Dictionary<Type,Func<object>> m_lookup;
     private readonly List<WeakReference<IDisposable>> resolvedInstances = new();
 
-   public T Resolve<T>()
+    public T Resolve<T>()
     {{
-        return (T)Resolve(typeof(T));
+        return TryResolve<T>(out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{typeof(T)}} has not been registered, and thus cannot be resolved"");
     }}
 
     public object Resolve(Type type)
     {{
-        var instance = m_lookup[type]();
-        return instance;
+        return TryResolve(type, out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{type}} has not been registered, and thus cannot be resolved"");
     }}
 
     public void Dispose()
@@ -478,22 +485,28 @@ public sealed partial class LifetimeScope : IContainer
             }}
         }}
         resolvedInstances.Clear();
+        Base?.Dispose();
     }}
 
     public bool TryResolve(Type type, out object? resolved)
     {{
+        resolved = default;
         if(m_lookup.TryGetValue(type, out var factory))
         {{
             resolved = factory();
             return true;
         }}
-        resolved = default;
+        if(Base is not null)
+        {{
+            return Base.TryResolve(type, out resolved);
+        }}
         return false;
     }}
 
 
     public bool TryResolve<T>(out T? resolved)
     {{
+        resolved = default;
         if(m_lookup.TryGetValue(typeof(T), out var factory))
         {{
             var value = factory();
@@ -503,12 +516,15 @@ public sealed partial class LifetimeScope : IContainer
                 return true;
             }}
         }}
-        resolved = default;
+        if(Base is not null)
+        {{
+            return Base.TryResolve<T>(out resolved);
+        }}
         return false;
     }}
     public bool IsRegistered(Type type)
     {{
-        return m_lookup.ContainsKey(type);
+        return m_lookup.ContainsKey(type) ? true : Base?.IsRegistered(type) == true;
     }}
     public bool IsRegistered<T>() => IsRegistered(typeof(T));
 }}
