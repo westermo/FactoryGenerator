@@ -496,7 +496,7 @@ public sealed partial class LifetimeScope : IContainer
             resolved = factory();
             return true;
         }}
-        if(Base is not null)
+        else if(Base is not null)
         {{
             return Base.TryResolve(type, out resolved);
         }}
@@ -516,7 +516,7 @@ public sealed partial class LifetimeScope : IContainer
                 return true;
             }}
         }}
-        if(Base is not null)
+        else if(Base is not null)
         {{
             return Base.TryResolve<T>(out resolved);
         }}

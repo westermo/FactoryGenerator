@@ -12,7 +12,7 @@ namespace Benchmarks;
 [JsonExporterAttribute.FullCompressed]
 public class ResolveBenchmarks
 {
-    private readonly IContainer m_container = new DependencyInjectionContainer(default, default, default!);
+    private readonly IContainer m_container = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
     [Benchmark]
     public ChainA ResolveChain() => m_container.Resolve<ChainA>();

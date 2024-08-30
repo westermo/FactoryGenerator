@@ -225,6 +225,7 @@ public class InjectionDetectionTests()
         var newContainer = new DependencyInjectionContainer(m_container);
         var resolved = m_container.Resolve<IEnumerable<IArray>>();
         resolved.Count().ShouldBe(6);
+        var nonInjected = m_container.Resolve<Inherited.NonInjectedClass>();
     }
     [Fact]
     public void HierarchicalContainersResolveArraysProperly()
