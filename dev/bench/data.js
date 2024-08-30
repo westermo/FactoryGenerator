@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1716553037623,
+  "lastUpdate": 1725025050729,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -222,6 +222,72 @@ window.BENCHMARK_DATA = {
             "value": 957.406155858721,
             "unit": "ns",
             "range": "± 10.426839010072053"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2889a37547a184c092bd54844ed1d36633b35183",
+          "message": "Merge pull request #21 from carl-andersson-at-westermo/feature/merge-containers\n\nAllowed for containers to be created from other containers, provided they can provide necessary arguments",
+          "timestamp": "2024-08-30T15:34:44+02:00",
+          "tree_id": "db67fc4806ffa6b59bc794d53b086f91ab12edb6",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/2889a37547a184c092bd54844ed1d36633b35183"
+        },
+        "date": 1725025049775,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 149.24395560423534,
+            "unit": "ns",
+            "range": "± 0.7494217204199847"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 31.764671605366928,
+            "unit": "ns",
+            "range": "± 0.04248950943254971"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 27.425354753931362,
+            "unit": "ns",
+            "range": "± 0.04628933902722763"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 36.44072937539646,
+            "unit": "ns",
+            "range": "± 0.21740849224469483"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveArray",
+            "value": 29.21561828056971,
+            "unit": "ns",
+            "range": "± 0.2047224343313684"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 940.5447941507612,
+            "unit": "ns",
+            "range": "± 5.375141575807686"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateFromSelf",
+            "value": 969.7445693697248,
+            "unit": "ns",
+            "range": "± 10.507900006220527"
           }
         ]
       }
