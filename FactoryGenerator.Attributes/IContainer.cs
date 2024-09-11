@@ -14,6 +14,7 @@ public interface ILifetimeScope : IDisposable
 
     bool IsRegistered(Type type);
     bool IsRegistered<T>();
+    bool GetBoolean(string key);
     public ILifetimeScope BeginLifetimeScope();
 }
 

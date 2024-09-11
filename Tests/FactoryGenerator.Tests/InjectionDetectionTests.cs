@@ -239,6 +239,19 @@ public class InjectionDetectionTests()
         var newContainer = new DependencyInjectionContainer(new DummyContainer());
         newContainer.Resolve<string>().ShouldBe(DummyContainer.DummyText);
     }
+    
+    [Fact]
+    public void ContainerPropgatesRelevantBooleansCreateItself()
+    {
+        var baseContainer = new DependencyInjectionContainer(true, false, new());
+        baseContainer.GetBoolean("A").ShouldBeFalse();
+        baseContainer.GetBoolean("TestBool").ShouldBeTrue();
+
+        var newContainer = new DependencyInjectionContainer(baseContainer);
+        
+        newContainer.GetBoolean("A").ShouldBeFalse();
+        newContainer.GetBoolean("TestBool").ShouldBeTrue();
+    }
     private class DummyContainer : IContainer
     {
         public const string DummyText = "I am a bit of text";
@@ -255,6 +268,11 @@ public class InjectionDetectionTests()
 
         public void Dispose()
         {
+        }
+
+        public bool GetBoolean(string key)
+        {
+            return false;
         }
 
         public bool IsRegistered(System.Type type)
