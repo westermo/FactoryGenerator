@@ -250,6 +250,13 @@ public sealed partial class {ClassName} : IContainer
     {{
         return m_booleans.TryGetValue(key, out var value) ? value : false; 
     }}
+    public IEnumerable<(string Key, bool Value)> GetBooleans()
+    {{
+        foreach(var pair in m_booleans)
+        {{
+            yield return (pair.Key, pair.Value);
+        }}
+    }}
 }}";
 
             var booleans = dataInjections.Select(inj => inj.BooleanInjection).Where(b => b is not null)
@@ -538,6 +545,13 @@ public sealed partial class LifetimeScope : IContainer
     {{
         return m_booleans.TryGetValue(key, out var value) ? value : false; 
     }}
+    public IEnumerable<(string Key, bool Value)> GetBooleans()
+    {{
+        foreach(var pair in m_booleans)
+        {{
+            yield return (pair.Key, pair.Value);
+        }}
+    }}
 }}
 ";
             yield return Constructor(usingStatements, constructorFields,
@@ -632,9 +646,11 @@ public {className}(IContainer Base{fromConstructor})
 {MakeDictionary(requested)}
 {MakeDictionary(constructorParameters)}
     }};
-    m_booleans = new({booleans.Count}) {{
-{string.Join("\n", booleans.Select(b => b.Split(' ').Last()).Select(b => $"\t\t{{ \"{b}\", {b} }},"))}
-    }};
+    m_booleans = new();
+    foreach(var (key, value) in Base.GetBooleans())
+    {{
+        m_booleans[key] = value;
+    }}
 }}" : string.Empty;
 
 

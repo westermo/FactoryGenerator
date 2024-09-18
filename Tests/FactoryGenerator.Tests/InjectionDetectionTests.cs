@@ -239,7 +239,7 @@ public class InjectionDetectionTests()
         var newContainer = new DependencyInjectionContainer(new DummyContainer());
         newContainer.Resolve<string>().ShouldBe(DummyContainer.DummyText);
     }
-    
+
     [Fact]
     public void ContainerPropgatesRelevantBooleansCreateItself()
     {
@@ -248,9 +248,16 @@ public class InjectionDetectionTests()
         baseContainer.GetBoolean("TestBool").ShouldBeTrue();
 
         var newContainer = new DependencyInjectionContainer(baseContainer);
-        
+
         newContainer.GetBoolean("A").ShouldBeFalse();
         newContainer.GetBoolean("TestBool").ShouldBeTrue();
+    }
+    [Fact]
+    public void HierarchicalContainersPropgatesBooleansUnknownToIt()
+    {
+        var newContainer = new DependencyInjectionContainer(new DummyContainer());
+        newContainer.GetBoolean("B").ShouldBe(true);
+        newContainer.GetBoolean("C").ShouldBe(false);
     }
     private class DummyContainer : IContainer
     {
@@ -309,6 +316,10 @@ public class InjectionDetectionTests()
             resolved = default;
             if (typeof(T) == typeof(string)) resolved = (T) (object) DummyText;
             return resolved != null;
+        }
+        public IEnumerable<(string Key, bool Value)> GetBooleans()
+        {
+            return [("B", true), ("C", false)];
         }
 
     }
