@@ -28,7 +28,7 @@ jobs:
       - name: Setup dotnet ${{ matrix.dotnet-version }}
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "9.0.x"
       - name: Restore
         run: dotnet restore FactoryGenerator.sln
       - name: Build
@@ -45,7 +45,7 @@ jobs:
       - name: Setup dotnet ${{ matrix.dotnet-version }}
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "9.0.x"
       - name: Pack Generator
         run: dotnet pack FactoryGenerator/FactoryGenerator.csproj -o "${{ env.NuGetDirectory }}" --property:RepositoryCommit="${{ env.COMMIT_SHA }}" --property:InformationalVersion="UNRELEASED" --property:AssemblyVersion="0.0.0" --property:FileVersion="0.0.0" --property:Version="0.0.0"
       - name: Pack Attributes
@@ -66,7 +66,7 @@ jobs:
       - name: Setup dotnet ${{ matrix.dotnet-version }}
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "9.0.x"
       - name: Pack Generator
         run: dotnet pack FactoryGenerator/FactoryGenerator.csproj -o "${{ env.NuGetDirectory }}" --property:RepositoryCommit="${{ env.COMMIT_SHA }}" --property:InformationalVersion="${{ github.ref_name }}" --property:AssemblyVersion="${{ github.ref_name }}" --property:FileVersion="${{ github.ref_name }}" --property:Version="${{ github.ref_name }}"
       - name: Pack Attributes
@@ -81,7 +81,7 @@ jobs:
   deploy:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
-    needs: [pack-release]
+    needs: [ pack-release ]
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -90,7 +90,7 @@ jobs:
       - name: Setup dotnet ${{ matrix.dotnet-version }}
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "9.0.x"
       - name: Publish Nuget packages
         run: |
           for file in $(find "${{ env.NuGetDirectory }}" -type f -name "*.nupkg"); do
@@ -106,10 +106,10 @@ jobs:
       - name: Setup dotnet ${{ matrix.dotnet-version }}
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "9.0.x"
       - name: Run benchmark
         run: cd Benchmarking/Benchmarks && dotnet run -c Release --exporters json --filter '*'
-        
+
       - name: Store benchmark result
         uses: rhysd/github-action-benchmark@v1
         with:

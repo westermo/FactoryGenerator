@@ -23,10 +23,10 @@ jobs:
       - name: Setup dotnet ${{ matrix.dotnet-version }}
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: "8.0.x"
+          dotnet-version: "9.0.x"
       - name: Run benchmark
         run: cd Benchmarking/Benchmarks && dotnet run -c Release --exporters json --filter '*'
-        
+
       - name: Store benchmark result
         uses: rhysd/github-action-benchmark@v1
         with:
