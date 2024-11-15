@@ -181,6 +181,7 @@ public sealed partial class {ClassName} : IContainer
     public IContainer? Inheritor {{ get; set; }}
     private object m_lock = new();
     private Dictionary<Type,Func<object>> m_lookup;
+    private Dictionary<string,bool> m_booleans;
     private readonly List<WeakReference<IDisposable>> resolvedInstances = new();
 
     public T Resolve<T>()
@@ -245,6 +246,17 @@ public sealed partial class {ClassName} : IContainer
         return m_lookup.ContainsKey(type) ? true : Base?.IsRegistered(type) == true;
     }}
     public bool IsRegistered<T>() => IsRegistered(typeof(T));
+    public bool GetBoolean(string key)
+    {{
+        return m_booleans.TryGetValue(key, out var value) ? value : false; 
+    }}
+    public IEnumerable<(string Key, bool Value)> GetBooleans()
+    {{
+        foreach(var pair in m_booleans)
+        {{
+            yield return (pair.Key, pair.Value);
+        }}
+    }}
 }}";
 
             var booleans = dataInjections.Select(inj => inj.BooleanInjection).Where(b => b is not null)
@@ -424,7 +436,7 @@ public sealed partial class {ClassName} : IContainer
                                      dictSize, interfaceInjectors.Keys,
                                      localizedParameters, requested,
                                      constructorParameters, true, ClassName, lifetimeParameters,
-                                     resolvingConstructorAssignments: resolvedConstructorAssignments);
+                                     resolvingConstructorAssignments: resolvedConstructorAssignments, booleans: justBooleans);
             yield return Declarations(usingStatements, declarations, ClassName);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations, ClassName);
             yield return $@"{usingStatements}
@@ -463,6 +475,7 @@ public sealed partial class LifetimeScope : IContainer
     private object m_lock = new();
     private {ClassName} m_fallback;
     private Dictionary<Type,Func<object>> m_lookup;
+    private Dictionary<string,bool> m_booleans;
     private readonly List<WeakReference<IDisposable>> resolvedInstances = new();
 
     public T Resolve<T>()
@@ -527,6 +540,18 @@ public sealed partial class LifetimeScope : IContainer
         return m_lookup.ContainsKey(type) ? true : Base?.IsRegistered(type) == true;
     }}
     public bool IsRegistered<T>() => IsRegistered(typeof(T));
+    
+    public bool GetBoolean(string key)
+    {{
+        return m_booleans.TryGetValue(key, out var value) ? value : false; 
+    }}
+    public IEnumerable<(string Key, bool Value)> GetBooleans()
+    {{
+        foreach(var pair in m_booleans)
+        {{
+            yield return (pair.Key, pair.Value);
+        }}
+    }}
 }}
 ";
             yield return Constructor(usingStatements, constructorFields,
@@ -534,7 +559,7 @@ public sealed partial class LifetimeScope : IContainer
                                      dictSize, interfaceInjectors.Keys,
                                      localizedParameters, requested,
                                      constructorParameters, false, LifetimeName,
-                                     resolvingConstructorAssignments: resolvedConstructorAssignments, addMergingConstructor: false);
+                                     resolvingConstructorAssignments: resolvedConstructorAssignments, addMergingConstructor: false, booleans: justBooleans);
             yield return Declarations(usingStatements, scopedDeclarations, LifetimeName);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations, LifetimeName);
         }
@@ -595,7 +620,7 @@ public sealed partial class LifetimeScope : IContainer
         private static string Constructor(string usingStatements, string constructorFields, string constructor, string constructorAssignments, int dictSize,
                                           IEnumerable<INamedTypeSymbol> interfaceInjectors, List<IParameterSymbol> localizedParameters, List<INamedTypeSymbol> requested,
                                           List<IParameterSymbol> constructorParameters, bool addLifetimeScopeFunction, string className, string? lifetimeParameters = null,
-                                          string? fromConstructor = null, string? resolvingConstructorAssignments = null, bool addMergingConstructor = true)
+                                          string? fromConstructor = null, string? resolvingConstructorAssignments = null, bool addMergingConstructor = true, List<string> booleans = null!)
         {
             var lifetimeScopeFunction = addLifetimeScopeFunction
                                             ? $@"
@@ -613,12 +638,19 @@ public {className}(IContainer Base{fromConstructor})
     Base.Inheritor = this;  
     {resolvingConstructorAssignments}
     
+{string.Join("\n", booleans.Select(b => b.Split(' ').Last()).Select(b => $"\t this.{b} = Base.GetBoolean(\"{b}\");"))}
+    
     m_lookup = new({dictSize}) {{
 {MakeDictionary(interfaceInjectors)}
 {MakeDictionary(localizedParameters)}
 {MakeDictionary(requested)}
 {MakeDictionary(constructorParameters)}
     }};
+    m_booleans = new();
+    foreach(var (key, value) in Base.GetBooleans())
+    {{
+        m_booleans[key] = value;
+    }}
 }}" : string.Empty;
 
 
@@ -638,6 +670,10 @@ public partial class {className}
 {MakeDictionary(requested)}
 {MakeDictionary(constructorParameters)}
         }};
+        
+    m_booleans = new({booleans.Count}) {{
+{string.Join("\n", booleans.Select(b => b.Split(' ').Last()).Select(b => $"\t\t{{ \"{b}\", {b} }},"))}
+    }};
     }}
     {mergingConstructor}
     {lifetimeScopeFunction}

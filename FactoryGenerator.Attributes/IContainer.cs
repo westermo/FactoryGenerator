@@ -1,4 +1,6 @@
 using System;
+using System.Collections;
+using System.Collections.Generic;
 
 namespace FactoryGenerator;
 #nullable enable
@@ -14,7 +16,9 @@ public interface ILifetimeScope : IDisposable
 
     bool IsRegistered(Type type);
     bool IsRegistered<T>();
-    public ILifetimeScope BeginLifetimeScope();
+    bool GetBoolean(string key);
+    IEnumerable<(string Key, bool Value)> GetBooleans();
+    ILifetimeScope BeginLifetimeScope();
 }
 
 public interface IContainer : ILifetimeScope
