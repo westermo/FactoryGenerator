@@ -1,5 +1,4 @@
 ﻿using BenchmarkDotNet.Attributes;
-using BenchmarkDotNet.Engines;
 using BenchmarkDotNet.Running;
 using FactoryGenerator;
 using Inherited;
@@ -12,7 +11,7 @@ namespace Benchmarks;
 [JsonExporterAttribute.FullCompressed]
 public class ResolveBenchmarks
 {
-    private readonly IContainer m_container = new DependencyInjectionContainer(default, default, new NonInjectedClass());
+    private readonly DependencyInjectionContainer m_container = new(default, default, new NonInjectedClass());
 
     [Benchmark]
     public ChainA ResolveChain() => m_container.Resolve<ChainA>();
