@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1731657479683,
+  "lastUpdate": 1731668368861,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -354,6 +354,72 @@ window.BENCHMARK_DATA = {
             "value": 934.7544463475546,
             "unit": "ns",
             "range": "± 5.694800428082997"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3a0eddd56a9fc08ee83c893fe774e4822e4b734c",
+          "message": "Merge pull request #22 from Iacentis/feature/link-state-keys\n\nPropogate booleans across container chains",
+          "timestamp": "2024-11-15T11:56:35+01:00",
+          "tree_id": "7d1e46e9f2bcdc888a318d250a4d2ee339050640",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/3a0eddd56a9fc08ee83c893fe774e4822e4b734c"
+        },
+        "date": 1731668368377,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 127.2480346606328,
+            "unit": "ns",
+            "range": "± 1.1994366610175295"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 23.00698157896598,
+            "unit": "ns",
+            "range": "± 0.024486208288667387"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 28.708673257094162,
+            "unit": "ns",
+            "range": "± 0.01271468407034605"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 27.37115999062856,
+            "unit": "ns",
+            "range": "± 0.31441921318879035"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveArray",
+            "value": 24.540784840400402,
+            "unit": "ns",
+            "range": "± 0.0384012282181908"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 1018.299306233724,
+            "unit": "ns",
+            "range": "± 11.621130217412304"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateFromSelf",
+            "value": 1091.7985431126185,
+            "unit": "ns",
+            "range": "± 7.835387907852567"
           }
         ]
       }
