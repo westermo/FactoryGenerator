@@ -2,6 +2,6 @@ FactoryGenerator is an IoC container that uses [Roslyn](https://github.com/dotne
 with [Autofac](https://autofac.org/) beyond syntax choices.
 
 ## Features
-
 - **Attribute-based Generation:** Simply decorate your code with attributes like ```[Inject]```,```[Singleton]```,```[Self]``` and more and your IoC container will be woven together.
 - **Test-Overridability:** Need to swap out one injection for another to test something? Simply ```[Inject]``` a replacement inside your test project for a new container.
+- **ASP.NET Core Integration:** Seamlessly integrate your source-generated container with the standard ASP.NET Core web pipeline.

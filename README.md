@@ -1,5 +1,6 @@
 [![Nuget (Generator)](https://img.shields.io/nuget/v/FactoryGenerator?style=flat-square)](https://www.nuget.org/packages/FactoryGenerator/)
 [![Nuget (Attributes)](https://img.shields.io/nuget/v/FactoryGenerator.Attributes?style=flat-square)](https://www.nuget.org/packages/FactoryGenerator.Attributes/)
+[![Nuget (AspNetCore)](https://img.shields.io/nuget/v/FactoryGenerator.Extensions.AspNetCore?style=flat-square)](https://www.nuget.org/packages/FactoryGenerator.Extensions.AspNetCore/)
 [![Build](https://img.shields.io/github/actions/workflow/status/westermo/FactoryGenerator/build.yml?branch=main&style=flat-square)](https://github.com/westermo/FactoryGenerator/actions)
 [![License](https://img.shields.io/github/license/westermo/FactoryGenerator?style=flat-square)](https://github.com/westermo/FactoryGenerator/blob/develop/LICENSE)
 
@@ -15,8 +16,7 @@ with [Autofac](https://autofac.org/) beyond syntax choices.
 
 ### Usage
 
-FactoryGenerator consists of two seperate Nuget packages. **FactoryGenerator** and **FactoryGenerator.Attributes**, the former contains the actual Roslyn generator and the latter contains the
-attributes and container interfaces which can be used to decorate code.
+FactoryGenerator consists of three seperate Nuget packages. **FactoryGenerator**, **FactoryGenerator.Attributes**, and **FactoryGenerator.Extensions.AspNetCore**.
 
 **FactoryGenerator:**
 
@@ -26,6 +26,10 @@ package to that. Typically these would be your "Console/WPF Application" and the
 **FactoryGenerator.Attributes:**
 
 Reference this package from projects which add things to the IoC container via the ```[Inject]``` attribute, since it is the package that contains said attributes.
+
+**FactoryGenerator.Extensions.AspNetCore:**
+
+Reference this package from your ASP.NET Core web application to integrate the source-generated container into the standard web pipeline.
 
 For an example regarding which projects are best server by which package, see the following:
 
@@ -162,3 +166,37 @@ public class Provider : IProvider
 }
 ```
 With this code, it is now possible to do `container.Resolve<IResultType>()`, which will effectively return the result of `new Provider().Method()`, although, since `Method` is `[Inject]`ed as a `[Singleton]`, the result will be cached and the same instance will be returned at every call to `Resolve` as well as shared between all Injected implementations that require a `IResultType`.
+
+### ASP.NET Core Integration
+For web applications, you can integrate FactoryGenerator with the standard `IServiceProvider`.
+
+1. **Install the extension package**:
+`dotnet add package FactoryGenerator.Extensions.AspNetCore`
+
+2. **Setup in `Program.cs`**:
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Standard ASP.NET DI
+builder.Services.AddSingleton<IDateService, DateService>();
+
+var app = builder.Build();
+
+// 1. Convert standard DI to an adapter for FactoryGenerator
+var adapter = app.Services.ToContainer();
+
+// 2. Create the generated container using the adapter as its base
+// This allows FactoryGenerator to resolve framework services (IConfiguration, etc.)
+var container = new MyProject.Generated.DependencyInjectionContainer(adapter);
+
+// 3. Register the FactoryGenerator middleware
+// This will replace HttpContext.RequestServices with a scoped FactoryGenerator provider
+app.UseFactoryGenerator(container);
+
+app.MapGet("/", ([FromServices] IWelcomeService welcome) => 
+    Results.Text(welcome.GetWelcomeMessage()));
+
+app.Run();
+```
+
+This integration allows you to inject standard framework services (like `IConfiguration` or `ILogger`) into your `[Inject]`ed classes, and ensures that `[Scoped]` services are correctly disposed of at the end of each HTTP request.
