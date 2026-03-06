@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1731668368861,
+  "lastUpdate": 1772785898972,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -420,6 +420,72 @@ window.BENCHMARK_DATA = {
             "value": 1091.7985431126185,
             "unit": "ns",
             "range": "± 7.835387907852567"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "a6b46f47f48d1aea5eb109ba31dc20065e805e92",
+          "message": "Merge pull request #24 from Iacentis/feature/asp.net-integration\n\nFeature/asp.net integration",
+          "timestamp": "2026-03-06T09:28:12+01:00",
+          "tree_id": "4c830393b9cc1fcf7cc2f13fbf34d53ef1597f59",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/a6b46f47f48d1aea5eb109ba31dc20065e805e92"
+        },
+        "date": 1772785898679,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 125.6685450247356,
+            "unit": "ns",
+            "range": "± 0.9163963559657418"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 22.88846126596133,
+            "unit": "ns",
+            "range": "± 0.04434464783022659"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 25.204203069210052,
+            "unit": "ns",
+            "range": "± 0.05408923485212156"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 25.498870604313336,
+            "unit": "ns",
+            "range": "± 0.046481293276113035"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveArray",
+            "value": 24.301178704415047,
+            "unit": "ns",
+            "range": "± 0.03970270122566189"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 927.7955452845647,
+            "unit": "ns",
+            "range": "± 7.819429960437884"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateFromSelf",
+            "value": 1026.735672124227,
+            "unit": "ns",
+            "range": "± 14.016097837701734"
           }
         ]
       }
