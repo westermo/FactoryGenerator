@@ -1,6 +1,6 @@
 using System;
 using System.Collections.Generic;
-using System.Linq;
+using System.Text;
 using Microsoft.CodeAnalysis;
 
 namespace FactoryGenerator
@@ -53,72 +53,88 @@ namespace FactoryGenerator
 
         internal static bool IsEnumerable(ITypeSymbol symbol)
         {
-            return symbol.Name.Contains("IEnumerable") || ImplementsInterface(symbol, "IEnumerable");
-        }
-
-        private static bool ImplementsInterface(ITypeSymbol type, string interfaceName)
-        {
-            return type.AllInterfaces.Any(iface => iface.ToString().Contains(interfaceName));
+            if (symbol.SpecialType == SpecialType.System_Collections_IEnumerable) return true;
+            if (symbol is INamedTypeSymbol named)
+            {
+                var fullName = named.ConstructedFrom.ToDisplayString();
+                if (fullName == "System.Collections.Generic.IEnumerable<T>") return true;
+            }
+            return symbol.Name == "IEnumerable" && symbol.ContainingNamespace?.ToDisplayString() is
+                "System.Collections.Generic" or "System.Collections";
         }
 
         public static string MemberName(ISymbol? type)
         {
-            return type is null
-                       ? "null!"
-                       : type.ToString()
-                             .Replace('.', '_')
-                             .Replace('<', '_')
-                             .Replace('>', '_')
-                             .Replace("?", "")
-                             .Replace(',', '_')
-                             .Replace(" ", "") + "()";
+            if (type is null) return "null!";
+            var raw = type.ToString()!;
+            var sb = new StringBuilder(raw.Length + 2);
+            foreach (var c in raw)
+            {
+                switch (c)
+                {
+                    case '.': sb.Append('_'); break;
+                    case '<': sb.Append('_'); break;
+                    case '>': sb.Append('_'); break;
+                    case '?': break;
+                    case ',': sb.Append('_'); break;
+                    case ' ': break;
+                    default:  sb.Append(c); break;
+                }
+            }
+            sb.Append("()");
+            return sb.ToString();
         }
 
-        public static string SingletonFactory(INamedTypeSymbol type, string name, string lazyName, string creation, bool disposable)
+        public static string SingletonFactory(string typeName, string name, string lazyName, string creation, bool disposable)
         {
             if (disposable)
             {
                 return $@"
-    internal {type} {name}
+    internal {typeName} {name}
     {{
-        if ({lazyName} != null)
-            return {lazyName};
+        var cached = {lazyName};
+        if (cached != null)
+            return cached;
     
         lock (m_lock)
         {{
-            if ({lazyName} != null)
-                return {lazyName};
+            cached = {lazyName};
+            if (cached != null)
+                return cached;
             var value = {creation};
-            resolvedInstances.Add(new WeakReference<IDisposable>(value));
-            return {lazyName} = value;
+            GetResolvedInstances().Add(new WeakReference<IDisposable>(value));
+            {lazyName} = value;
+            return value;
         }}
     }} 
-    internal {type}? {lazyName};";
+    internal volatile {typeName}? {lazyName};";
             }
 
             return $@"
-    internal {type} {name}
+    internal {typeName} {name}
     {{
-        if ({lazyName} != null)
-            return {lazyName};
+        var cached = {lazyName};
+        if (cached != null)
+            return cached;
     
         lock (m_lock)
         {{
-            if ({lazyName} != null)
-                return {lazyName};
+            cached = {lazyName};
+            if (cached != null)
+                return cached;
             return {lazyName} = {creation};
         }}
     }} 
-    internal {type}? {lazyName};";
+    internal volatile {typeName}? {lazyName};";
         }
 
-        internal static string DisposableFactory(INamedTypeSymbol type, string name, string creationCall)
+        internal static string DisposableFactory(string typeName, string name, string creationCall)
         {
             return $@"
-    internal {type} {name}
+    internal {typeName} {name}
     {{    
         var value = {creationCall};
-        resolvedInstances.Add(new WeakReference<IDisposable>(value));
+        GetResolvedInstances().Add(new WeakReference<IDisposable>(value));
         return value;
     }}";
         }
