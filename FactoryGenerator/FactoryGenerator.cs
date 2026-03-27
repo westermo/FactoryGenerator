@@ -53,7 +53,7 @@ namespace FactoryGenerator
         }
 
         private void MakeAutofacModule(SourceProductionContext context,
-                                       (((ImmutableArray<Injection> Injections, Compilation Compilation) Left, ImmutableArray<INamedTypeSymbol?> CompileTimeResolvedTypes) Left, LoggingOptions? log)
+                                       (((ImmutableArray<InjectionData> Injections, Compilation Compilation) Left, ImmutableArray<UsageData?> CompileTimeResolvedTypes) Left, LoggingOptions? log)
                                            data)
         {
             var injections = data.Left.Left.Injections;
@@ -72,15 +72,22 @@ namespace FactoryGenerator
             context.AddSource("LifetimeScope.EnumerableDeclarations.g.cs", source[7]);
         }
 
-        private INamedTypeSymbol? ResolveTransformations(GeneratorSyntaxContext context, CancellationToken token)
+        private UsageData? ResolveTransformations(GeneratorSyntaxContext context, CancellationToken token)
         {
             var typeArguments = context.Node.DescendantNodes().OfType<TypeArgumentListSyntax>().FirstOrDefault();
             if (typeArguments is null) return null;
             var identifier = typeArguments.DescendantNodes().FirstOrDefault();
             if (identifier is null) return null;
             var info = context.SemanticModel.GetSymbolInfo(identifier, token);
-            var symbol = (INamedTypeSymbol?) info.Symbol;
-            return symbol;
+            if (info.Symbol is not INamedTypeSymbol symbol) return null;
+            if (!SymbolUtility.IsEnumerable(symbol)) return null;
+            if (symbol.TypeArguments.Length != 1) return null;
+            var elemType = symbol.TypeArguments[0];
+            return new UsageData(
+                fullName: symbol.ToString()!,
+                memberName: SymbolUtility.MemberName(symbol).Replace("()", ""),
+                elementTypeFullName: elemType.ToString()!,
+                elementTypeMemberName: SymbolUtility.MemberName(elemType).Replace("()", ""));
         }
 
         private bool ResolveSymbols(SyntaxNode node, CancellationToken token)
@@ -89,7 +96,7 @@ namespace FactoryGenerator
             return invocation.ToString().Contains("Resolve");
         }
 
-        private static IEnumerable<Injection> FindMethods(INamespaceSymbol namespaceSymbol, CancellationToken token)
+        private static IEnumerable<InjectionData> FindMethods(INamespaceSymbol namespaceSymbol, CancellationToken token)
         {
             foreach (var type in SymbolUtility.GetAllTypes(namespaceSymbol))
             {
@@ -138,8 +145,8 @@ namespace FactoryGenerator
         private const string ClassName = "DependencyInjectionContainer";
         private const string LifetimeName = "LifetimeScope";
 
-        private static IEnumerable<string> GenerateCode(ImmutableArray<Injection> dataInjections,
-                                                        Compilation compilation, ImmutableArray<INamedTypeSymbol?> usages, ILogger log)
+        private static IEnumerable<string> GenerateCode(ImmutableArray<InjectionData> dataInjections,
+                                                        Compilation compilation, ImmutableArray<UsageData?> usages, ILogger log)
         {
             CheckForCycles(dataInjections);
             log.Log(LogLevel.Debug, "Starting Code Generation");
@@ -155,10 +162,12 @@ namespace {compilation.Assembly.Name}.Generated;
             yield return $@"{usingStatements}
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
 #nullable enable
+#pragma warning disable CS0169, CS0414
 public sealed partial class {ClassName} : IContainer
 {{
     
-    bool Reentrant = false;
+    private bool Reentrant;
+#pragma warning restore CS0169, CS0414
     private IContainer GetRoot()
     {{
         IContainer root = this;
@@ -179,76 +188,86 @@ public sealed partial class {ClassName} : IContainer
     }}
     public IContainer? Base {{ get; }}
     public IContainer? Inheritor {{ get; set; }}
-    private object m_lock = new();
+    private readonly object m_lock = new();
     private Dictionary<Type,Func<object>> m_lookup;
     private Dictionary<string,bool> m_booleans;
-    private readonly List<WeakReference<IDisposable>> resolvedInstances = new();
+    private List<WeakReference<IDisposable>>? resolvedInstances;
+
+    private List<WeakReference<IDisposable>> GetResolvedInstances()
+    {{
+        if (resolvedInstances is null)
+            lock (m_lock)
+                resolvedInstances ??= new List<WeakReference<IDisposable>>();
+        return resolvedInstances;
+    }}
 
     public T Resolve<T>()
     {{
-        return TryResolve<T>(out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{typeof(T)}} has not been registered, and thus cannot be resolved"");
+        if (m_lookup.TryGetValue(typeof(T), out var factory))
+            return (T)factory();
+        if (Base is not null)
+            return Base.Resolve<T>();
+        throw new KeyNotFoundException($""The type {{typeof(T)}} has not been registered, and thus cannot be resolved"");
     }}
 
     public object Resolve(Type type)
     {{
-        return TryResolve(type, out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{type}} has not been registered, and thus cannot be resolved"");
+        if (m_lookup.TryGetValue(type, out var factory))
+            return factory();
+        if (Base is not null)
+            return Base.Resolve(type);
+        throw new KeyNotFoundException($""The type {{type}} has not been registered, and thus cannot be resolved"");
     }}
 
     public void Dispose()
     {{
-        foreach (var weakReference in resolvedInstances)
+        if (resolvedInstances is not null)
         {{
-            if(weakReference.TryGetTarget(out var disposable))
+            foreach (var weakReference in resolvedInstances)
             {{
-                disposable.Dispose();
+                if(weakReference.TryGetTarget(out var disposable))
+                {{
+                    disposable.Dispose();
+                }}
             }}
+            resolvedInstances.Clear();
         }}
-        resolvedInstances.Clear();
         Base?.Dispose();
     }}
 
     public bool TryResolve(Type type, out object? resolved)
     {{
-        resolved = default;
         if(m_lookup.TryGetValue(type, out var factory))
         {{
             resolved = factory();
             return true;
         }}
         if(Base is not null)
-        {{
             return Base.TryResolve(type, out resolved);
-        }}
+        resolved = default;
         return false;
     }}
 
-
     public bool TryResolve<T>(out T? resolved)
     {{
-        resolved = default;
         if(m_lookup.TryGetValue(typeof(T), out var factory))
         {{
-            var value = factory();
-            if(value is T t)
-            {{
-                resolved = t;
-                return true;
-            }}
+            resolved = (T)factory();
+            return true;
         }}
         if(Base is not null)
-        {{
             return Base.TryResolve<T>(out resolved);
-        }}
+        resolved = default;
         return false;
     }}
     public bool IsRegistered(Type type)
     {{
-        return m_lookup.ContainsKey(type) ? true : Base?.IsRegistered(type) == true;
+        return m_lookup.ContainsKey(type) || Base?.IsRegistered(type) == true;
     }}
     public bool IsRegistered<T>() => IsRegistered(typeof(T));
     public bool GetBoolean(string key)
     {{
-        return m_booleans.TryGetValue(key, out var value) ? value : false; 
+        return m_booleans.TryGetValue(key, out var value) && value; 
     }}
     public IEnumerable<(string Key, bool Value)> GetBooleans()
     {{
@@ -265,154 +284,144 @@ public sealed partial class {ClassName} : IContainer
             var justBooleans = allArguments.ToList();
             var allParameters = booleans.Select(b => $"{b}").ToList();
             var ordered = dataInjections.Reverse().ToList();
-            //Put all test-overrides at the end
+
             foreach (var injection in ordered.ToArray())
             {
                 log.Log(LogLevel.Debug, $"Traversing {injection.Name}");
-                if (!injection.Type.ToString().Contains("Test")) continue;
-                ordered.Remove(injection); //Remove it from current position
-                ordered.Add(injection); //Add it to the end
+                if (!injection.IsTestType) continue;
+                ordered.Remove(injection);
+                ordered.Add(injection);
             }
 
-            //Get the relevant implementation that'll actually be injected
-            var interfaceInjectors = new Dictionary<INamedTypeSymbol, List<Injection>>(SymbolEqualityComparer.Default);
+            var interfaceInjectors = new Dictionary<string, List<InjectionData>>();
+            var interfaceMemberNames = new Dictionary<string, string>();
+
             foreach (var injection in ordered)
             {
-                foreach (var injectedInterface in injection.Interfaces)
+                for (int i = 0; i < injection.InterfaceFullNames.Length; i++)
                 {
-                    if (!interfaceInjectors.ContainsKey(injectedInterface))
+                    var ifaceFull = injection.InterfaceFullNames[i];
+                    var ifaceMember = injection.InterfaceMemberNames[i];
+                    if (!interfaceInjectors.ContainsKey(ifaceFull))
                     {
-                        interfaceInjectors[injectedInterface] = new List<Injection>();
+                        interfaceInjectors[ifaceFull] = new List<InjectionData>();
+                        interfaceMemberNames[ifaceFull] = ifaceMember;
                     }
-
-                    interfaceInjectors[injectedInterface].Add(injection);
+                    interfaceInjectors[ifaceFull].Add(injection);
                 }
             }
 
             var declarations = new Dictionary<string, string>();
             var scopedDeclarations = new Dictionary<string, string>();
-            var availableInterfaces = interfaceInjectors.Keys.ToImmutableArray();
-            var constructorParameters = new List<IParameterSymbol>();
+            var availableInterfaceFullNames = interfaceInjectors.Keys.ToImmutableArray();
+            var constructorParameters = new List<ParameterData>();
 
             foreach (var injection in ordered)
             {
-                declarations[injection.Name] = injection.Declaration(availableInterfaces, false);
-                scopedDeclarations[injection.Name] = injection.Declaration(availableInterfaces, true);
+                declarations[injection.Name] = Declaration(injection, availableInterfaceFullNames, false);
+                scopedDeclarations[injection.Name] = Declaration(injection, availableInterfaceFullNames, true);
 
-                HashSet<IParameterSymbol>? missing = null;
-                injection.GetBestConstructor(availableInterfaces, ref missing);
-                if (missing is null) continue;
-                constructorParameters.AddRange(missing.Where(parameter =>
-                                                                 constructorParameters.All(p => p.ToString() != parameter.ToString())));
+                var missing = GetBestConstructorMissing(injection, availableInterfaceFullNames);
+                foreach (var param in missing)
+                {
+                    var key = param.TypeFullName + " " + param.Name;
+                    if (constructorParameters.All(p => p.TypeFullName + " " + p.Name != key))
+                        constructorParameters.Add(param);
+                }
             }
 
-            foreach (var interfaceSymbol in interfaceInjectors.Keys)
+            foreach (var ifaceFull in interfaceInjectors.Keys)
             {
-                var possibilities = interfaceInjectors[interfaceSymbol];
+                var possibilities = interfaceInjectors[ifaceFull];
+                var ifaceMember = interfaceMemberNames[ifaceFull];
+                var ifaceMethodName = ifaceMember + "()";
+
                 if (possibilities.All(i => i.BooleanInjection == null))
                 {
                     var chosen = possibilities.Last();
-
-                    if (SymbolUtility.MemberName(interfaceSymbol) != chosen.Name)
+                    if (ifaceMethodName != chosen.Name)
                     {
-                        if (!declarations.ContainsKey(SymbolUtility.MemberName(interfaceSymbol)))
+                        if (!declarations.ContainsKey(ifaceMethodName))
                         {
-                            log.Log(LogLevel.Information, $"Selecting {chosen.Name} for {interfaceSymbol}");
-                            declarations[SymbolUtility.MemberName(interfaceSymbol)] =
-                                $"internal {interfaceSymbol} {SymbolUtility.MemberName(interfaceSymbol)} => {chosen.Name};";
-                            scopedDeclarations[SymbolUtility.MemberName(interfaceSymbol)] =
-                                $"internal {interfaceSymbol} {SymbolUtility.MemberName(interfaceSymbol)} => {chosen.Name};";
+                            log.Log(LogLevel.Information, $"Selecting {chosen.Name} for {ifaceFull}");
+                            declarations[ifaceMethodName] = $"internal {ifaceFull} {ifaceMethodName} => {chosen.Name};";
+                            scopedDeclarations[ifaceMethodName] = $"internal {ifaceFull} {ifaceMethodName} => {chosen.Name};";
                         }
                     }
                 }
                 else
                 {
-                    var keys = possibilities.Select(i => i.BooleanInjection?.Key).OfType<string>().ToArray().Distinct()
-                                            .Reverse().ToArray();
+                    var keys = possibilities.Select(i => i.BooleanInjection?.Key).OfType<string>().Distinct().Reverse().ToArray();
                     var fallback = possibilities.LastOrDefault(p => p.BooleanInjection == null);
                     var last = keys.Last();
                     var ternary = new StringBuilder();
                     foreach (var key in keys)
                     {
                         var trueValue = possibilities.LastOrDefault(p =>
-                                                                        p.BooleanInjection?.Value == true && p.BooleanInjection?.Key == key);
+                            p.BooleanInjection?.Value == true && p.BooleanInjection?.Key == key);
                         trueValue ??= fallback;
-                        ternary.Append(key == last ? $"{key} ? {trueValue?.Name ?? "null!"} : {fallback?.Name ?? "null!"}" : $"{key} ? {trueValue?.Name ?? "null!"} : ");
+                        ternary.Append(key == last
+                            ? $"{key} ? {trueValue?.Name ?? "null!"} : {fallback?.Name ?? "null!"}"
+                            : $"{key} ? {trueValue?.Name ?? "null!"} : ");
                     }
 
-                    if (!declarations.ContainsKey(SymbolUtility.MemberName(interfaceSymbol)))
+                    if (!declarations.ContainsKey(ifaceMethodName))
                     {
-                        log.Log(LogLevel.Information, $"Selecting {ternary} for {interfaceSymbol}");
-                        declarations[SymbolUtility.MemberName(interfaceSymbol)] =
-                            $"internal {interfaceSymbol} {SymbolUtility.MemberName(interfaceSymbol)} => {ternary};";
-                        scopedDeclarations[SymbolUtility.MemberName(interfaceSymbol)] =
-                            $"internal {interfaceSymbol} {SymbolUtility.MemberName(interfaceSymbol)} => {ternary};";
+                        log.Log(LogLevel.Information, $"Selecting {ternary} for {ifaceFull}");
+                        declarations[ifaceMethodName] = $"internal {ifaceFull} {ifaceMethodName} => {ternary};";
+                        scopedDeclarations[ifaceMethodName] = $"internal {ifaceFull} {ifaceMethodName} => {ternary};";
                     }
                 }
             }
 
-            var localizedParameters = new List<IParameterSymbol>();
-
+            var localizedParameters = new List<ParameterData>();
             var arrayDeclarations = new Dictionary<string, string>();
+
             foreach (var parameter in constructorParameters.ToArray())
             {
-                if (!SymbolUtility.IsEnumerable(parameter.Type)) continue;
-                if (parameter.Type is not INamedTypeSymbol named) continue;
-                if (named.TypeArguments.Length != 1) continue;
-                var type = (INamedTypeSymbol) named.TypeArguments[0];
+                if (!parameter.IsEnumerable) continue;
+                if (parameter.EnumerableElementFullName is null) continue;
                 var name = parameter.Name;
-                log.Log(LogLevel.Debug, $"Creating Array: {name} of type {type}[]");
-                MakeArray(arrayDeclarations, name, type, interfaceInjectors);
+                log.Log(LogLevel.Debug, $"Creating Array: {name} of type {parameter.EnumerableElementFullName}[]");
+                MakeArray(arrayDeclarations, name, parameter.EnumerableElementFullName, parameter.EnumerableElementMemberName!, interfaceInjectors);
                 constructorParameters.Remove(parameter);
                 localizedParameters.Add(parameter);
             }
 
             foreach (var parameter in constructorParameters.ToArray())
             {
-                if (parameter.Type is not IArrayTypeSymbol array) continue;
-                if (array.ElementType is not INamedTypeSymbol type) continue;
+                if (!parameter.IsArrayType) continue;
+                if (parameter.ArrayElementFullName is null) continue;
                 var name = parameter.Name;
-                log.Log(LogLevel.Debug, $"Creating Array: {name} of type {type}[]");
-                MakeArray(arrayDeclarations, name, type, interfaceInjectors);
-
+                log.Log(LogLevel.Debug, $"Creating Array: {name} of type {parameter.ArrayElementFullName}[]");
+                MakeArray(arrayDeclarations, name, parameter.ArrayElementFullName, parameter.ArrayElementMemberName!, interfaceInjectors);
                 constructorParameters.Remove(parameter);
                 localizedParameters.Add(parameter);
             }
 
-            var requested = new List<INamedTypeSymbol>();
+            var requestedUsages = new List<UsageData>();
 
             foreach (var request in usages)
             {
-                if (localizedParameters.Any(p => p.Type.Equals(request, SymbolEqualityComparer.Default))) continue;
                 if (request is null) continue;
-                if (!SymbolUtility.IsEnumerable(request)) continue;
-                if (request.TypeArguments.Length != 1) continue;
-                log.Log(LogLevel.Information, $"Creating Requested: {request}");
-                var type = (INamedTypeSymbol) request.TypeArguments[0];
-                var name = SymbolUtility.MemberName(request).Replace("()", "");
-                log.Log(LogLevel.Debug, $"Creating Array: {name} of type {type}[]");
-
-                MakeArray(arrayDeclarations, name, type, interfaceInjectors, true);
-                requested.Add(request);
+                if (localizedParameters.Any(p => p.TypeFullName == request.FullName)) continue;
+                log.Log(LogLevel.Information, $"Creating Requested: {request.FullName}");
+                log.Log(LogLevel.Debug, $"Creating Array: {request.MemberName} of type {request.ElementTypeFullName}[]");
+                MakeArray(arrayDeclarations, request.MemberName, request.ElementTypeFullName, request.ElementTypeMemberName, interfaceInjectors, true);
+                requestedUsages.Add(request);
             }
-
 
             foreach (var parameter in constructorParameters.ToArray())
             {
-                if (parameter.Type.Name.Contains("IContainer"))
-                {
-                    log.Log(LogLevel.Debug, $"Registering {parameter.Name} as Self");
-                    declarations[parameter.Name] = $"private IContainer {parameter.Name} => this;";
-                    scopedDeclarations[parameter.Name] = $"private IContainer {parameter.Name} => this;";
-                    constructorParameters.Remove(parameter);
-                }
+                if (!parameter.TypeFullName.Contains("IContainer")) continue;
+                log.Log(LogLevel.Debug, $"Registering {parameter.Name} as Self");
+                declarations[parameter.Name] = $"private IContainer {parameter.Name} => this;";
+                scopedDeclarations[parameter.Name] = $"private IContainer {parameter.Name} => this;";
+                constructorParameters.Remove(parameter);
             }
 
-            var arguments = constructorParameters.OrderBy(p => p.Type.ToString()).Select(p => $"{p.Type} {p.Name}")
-                                                 .Distinct();
-
-            var parameters = constructorParameters.OrderBy(p => p.Type.ToString()).Select(p => $"{p.Name}")
-                                                  .Distinct();
+            var arguments = constructorParameters.OrderBy(p => p.TypeFullName).Select(p => $"{p.TypeFullName} {p.Name}").Distinct();
+            var parameters = constructorParameters.OrderBy(p => p.TypeFullName).Select(p => p.Name).Distinct();
             allArguments.AddRange(arguments);
             var lifetimeArguments = allArguments.ToList();
             allParameters.AddRange(parameters);
@@ -426,25 +435,32 @@ public sealed partial class {ClassName} : IContainer
             log.Log(LogLevel.Debug, $"Resulting Constructor: {constructor}");
             var constructorFields = string.Join("\n\t", allArguments.Select(arg => arg + ";"));
             var constructorAssignments = string.Join("\n\t\t",
-                                                     allArguments.Select(arg => arg.Split(' ').Last()).Select(arg => $"this.{arg} = {arg};"));
-            var resolvedConstructorAssignments = string.Join("\n\t\t", allArguments.Select(a => a.Split(' ')).Where(a => a[0] != "bool").Select(a => $"this.{a[1]} = Base.Resolve<{a[0]}>();"));
-            var dictSize = interfaceInjectors.Count + localizedParameters.Count + requested.Count +
+                allArguments.Select(arg => arg.Split(' ').Last()).Select(arg => $"this.{arg} = {arg};"));
+            var resolvedConstructorAssignments = string.Join("\n\t\t",
+                allArguments.Select(a => a.Split(' ')).Where(a => a[0] != "bool")
+                            .Select(a => $"this.{a[1]} = Base.Resolve<{a[0]}>();"));
 
-                           constructorParameters.Count;
+            var interfacePairs = interfaceInjectors.Keys.Select(k => (TypeName: k, MemberName: interfaceMemberNames[k])).ToList();
+            var localizedPairs = localizedParameters.Select(p => (TypeName: p.TypeFullName, ParamName: p.Name)).ToList();
+            var requestedPairs = requestedUsages.Select(u => (TypeName: u.FullName, MemberName: u.MemberName)).ToList();
+            var constructorPairs = constructorParameters.Select(p => (TypeName: p.TypeFullName, ParamName: p.Name)).ToList();
+
+            var dictSize = interfaceInjectors.Count + localizedParameters.Count + requestedUsages.Count + constructorParameters.Count;
             yield return Constructor(usingStatements, constructorFields,
                                      constructor, constructorAssignments,
-                                     dictSize, interfaceInjectors.Keys,
-                                     localizedParameters, requested,
-                                     constructorParameters, true, ClassName, lifetimeParameters,
+                                     dictSize, interfacePairs, localizedPairs, requestedPairs, constructorPairs,
+                                     true, ClassName, lifetimeParameters,
                                      resolvingConstructorAssignments: resolvedConstructorAssignments, booleans: justBooleans);
             yield return Declarations(usingStatements, declarations, ClassName);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations, ClassName);
             yield return $@"{usingStatements}
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
 #nullable enable
+#pragma warning disable CS0169, CS0414
 public sealed partial class LifetimeScope : IContainer
 {{
-    private bool Reentrant = false;
+    private bool Reentrant;
+#pragma warning restore CS0169, CS0414
     private IContainer GetRoot()
     {{
         IContainer root = this;
@@ -469,81 +485,91 @@ public sealed partial class LifetimeScope : IContainer
     public ILifetimeScope BeginLifetimeScope()
     {{
         var scope = m_fallback.BeginLifetimeScope();
-        resolvedInstances.Add(new WeakReference<IDisposable>(scope));
+        GetResolvedInstances().Add(new WeakReference<IDisposable>(scope));
         return scope;
     }}
-    private object m_lock = new();
+    private readonly object m_lock = new();
     private {ClassName} m_fallback;
     private Dictionary<Type,Func<object>> m_lookup;
     private Dictionary<string,bool> m_booleans;
-    private readonly List<WeakReference<IDisposable>> resolvedInstances = new();
+    private List<WeakReference<IDisposable>>? resolvedInstances;
+
+    private List<WeakReference<IDisposable>> GetResolvedInstances()
+    {{
+        if (resolvedInstances is null)
+            lock (m_lock)
+                resolvedInstances ??= new List<WeakReference<IDisposable>>();
+        return resolvedInstances;
+    }}
 
     public T Resolve<T>()
     {{
-        return TryResolve<T>(out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{typeof(T)}} has not been registered, and thus cannot be resolved"");
+        if (m_lookup.TryGetValue(typeof(T), out var factory))
+            return (T)factory();
+        if (Base is not null)
+            return Base.Resolve<T>();
+        throw new KeyNotFoundException($""The type {{typeof(T)}} has not been registered, and thus cannot be resolved"");
     }}
 
     public object Resolve(Type type)
     {{
-        return TryResolve(type, out var resolved) ? resolved! : throw new KeyNotFoundException($""The type {{type}} has not been registered, and thus cannot be resolved"");
+        if (m_lookup.TryGetValue(type, out var factory))
+            return factory();
+        if (Base is not null)
+            return Base.Resolve(type);
+        throw new KeyNotFoundException($""The type {{type}} has not been registered, and thus cannot be resolved"");
     }}
 
     public void Dispose()
     {{
-        foreach (var weakReference in resolvedInstances)
+        if (resolvedInstances is not null)
         {{
-            if(weakReference.TryGetTarget(out var disposable))
+            foreach (var weakReference in resolvedInstances)
             {{
-                disposable.Dispose();
+                if(weakReference.TryGetTarget(out var disposable))
+                {{
+                    disposable.Dispose();
+                }}
             }}
+            resolvedInstances.Clear();
         }}
-        resolvedInstances.Clear();
         Base?.Dispose();
     }}
 
     public bool TryResolve(Type type, out object? resolved)
     {{
-        resolved = default;
         if(m_lookup.TryGetValue(type, out var factory))
         {{
             resolved = factory();
             return true;
         }}
-        else if(Base is not null)
-        {{
+        if(Base is not null)
             return Base.TryResolve(type, out resolved);
-        }}
+        resolved = default;
         return false;
     }}
 
-
     public bool TryResolve<T>(out T? resolved)
     {{
-        resolved = default;
         if(m_lookup.TryGetValue(typeof(T), out var factory))
         {{
-            var value = factory();
-            if(value is T t)
-            {{
-                resolved = t;
-                return true;
-            }}
+            resolved = (T)factory();
+            return true;
         }}
-        else if(Base is not null)
-        {{
+        if(Base is not null)
             return Base.TryResolve<T>(out resolved);
-        }}
+        resolved = default;
         return false;
     }}
     public bool IsRegistered(Type type)
     {{
-        return m_lookup.ContainsKey(type) ? true : Base?.IsRegistered(type) == true;
+        return m_lookup.ContainsKey(type) || Base?.IsRegistered(type) == true;
     }}
     public bool IsRegistered<T>() => IsRegistered(typeof(T));
     
     public bool GetBoolean(string key)
     {{
-        return m_booleans.TryGetValue(key, out var value) ? value : false; 
+        return m_booleans.TryGetValue(key, out var value) && value; 
     }}
     public IEnumerable<(string Key, bool Value)> GetBooleans()
     {{
@@ -556,60 +582,54 @@ public sealed partial class LifetimeScope : IContainer
 ";
             yield return Constructor(usingStatements, constructorFields,
                                      lifetimeConstructor, constructorAssignments,
-                                     dictSize, interfaceInjectors.Keys,
-                                     localizedParameters, requested,
-                                     constructorParameters, false, LifetimeName,
+                                     dictSize, interfacePairs, localizedPairs, requestedPairs, constructorPairs,
+                                     false, LifetimeName,
                                      resolvingConstructorAssignments: resolvedConstructorAssignments, addMergingConstructor: false, booleans: justBooleans);
             yield return Declarations(usingStatements, scopedDeclarations, LifetimeName);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations, LifetimeName);
         }
 
-        private static void CheckForCycles(ImmutableArray<Injection> dataInjections)
+        private static void CheckForCycles(ImmutableArray<InjectionData> dataInjections)
         {
-            var tree = new Dictionary<INamedTypeSymbol, List<INamedTypeSymbol>>(SymbolEqualityComparer.Default);
+            var tree = new Dictionary<string, List<string>>();
             foreach (var injection in dataInjections)
             {
-                //Methods can sort themselves out, and may include logic that makes it unsuitable to cycle-detect.
                 if (injection.Lambda != null) continue;
-                var node = new List<INamedTypeSymbol>();
-                foreach (var iface in injection.Interfaces)
+                var node = new List<string>();
+                foreach (var ifaceName in injection.InterfaceFullNames)
                 {
-                    if (!tree.ContainsKey(iface))
-                    {
-                        tree[iface] = node;
-                    }
+                    if (!tree.ContainsKey(ifaceName))
+                        tree[ifaceName] = node;
                 }
 
-                foreach (var constructor in injection.Type.Constructors)
+                foreach (var ctor in injection.Constructors)
                 {
-                    foreach (var parameter in constructor.Parameters)
+                    foreach (var parameter in ctor.Parameters)
                     {
-                        if (parameter.Type is INamedTypeSymbol named)
+                        string? depName;
+                        if (parameter.IsEnumerable)
                         {
-                            if (SymbolUtility.IsEnumerable(parameter.Type))
-                            {
-                                if (named.TypeArguments.Length != 1) continue;
-                                named = (INamedTypeSymbol) named.TypeArguments[0];
-                            }
-
-                            node.Add(named);
-
-                            if (tree.TryGetValue(named, out var list))
-                            {
-                                foreach (var iface in injection.Interfaces)
-                                {
-                                    if (list.Contains(iface)) throw new InvalidOperationException($"Cyclic Dependency Detected between {injection.Type} and {iface}");
-                                }
-                            }
+                            if (parameter.EnumerableElementFullName is null) continue;
+                            depName = parameter.EnumerableElementFullName;
+                        }
+                        else if (parameter.IsArrayType)
+                        {
+                            if (parameter.ArrayElementFullName is null) continue;
+                            depName = parameter.ArrayElementFullName;
+                        }
+                        else
+                        {
+                            depName = parameter.TypeFullName;
                         }
 
-                        if (parameter.Type is not IArrayTypeSymbol { ElementType: INamedTypeSymbol arrType }) continue;
+                        node.Add(depName);
+                        if (tree.TryGetValue(depName, out var list))
                         {
-                            node.Add(arrType);
-                            if (!tree.TryGetValue(arrType, out var list)) continue;
-                            foreach (var iface in injection.Interfaces)
+                            foreach (var ifaceName in injection.InterfaceFullNames)
                             {
-                                if (list.Contains(iface)) throw new InvalidOperationException($"Cyclic Dependency Detected between {injection.Type} and {iface}");
+                                if (list.Contains(ifaceName))
+                                    throw new InvalidOperationException(
+                                        $"Cyclic Dependency Detected between {injection.TypeFullName} and {ifaceName}");
                             }
                         }
                     }
@@ -618,8 +638,9 @@ public sealed partial class LifetimeScope : IContainer
         }
 
         private static string Constructor(string usingStatements, string constructorFields, string constructor, string constructorAssignments, int dictSize,
-                                          IEnumerable<INamedTypeSymbol> interfaceInjectors, List<IParameterSymbol> localizedParameters, List<INamedTypeSymbol> requested,
-                                          List<IParameterSymbol> constructorParameters, bool addLifetimeScopeFunction, string className, string? lifetimeParameters = null,
+                                          IEnumerable<(string TypeName, string MemberName)> interfaceTypePairs, IEnumerable<(string TypeName, string ParamName)> localizedParamPairs,
+                                          IEnumerable<(string TypeName, string MemberName)> requestedPairs, IEnumerable<(string TypeName, string ParamName)> constructorParamPairs,
+                                          bool addLifetimeScopeFunction, string className, string? lifetimeParameters = null,
                                           string? fromConstructor = null, string? resolvingConstructorAssignments = null, bool addMergingConstructor = true, List<string> booleans = null!)
         {
             var lifetimeScopeFunction = addLifetimeScopeFunction
@@ -627,7 +648,7 @@ public sealed partial class LifetimeScope : IContainer
 public ILifetimeScope BeginLifetimeScope()
 {{
     var scope = new {LifetimeName}({lifetimeParameters});
-    resolvedInstances.Add(new WeakReference<IDisposable>(scope));
+    GetResolvedInstances().Add(new WeakReference<IDisposable>(scope));
     return scope;
 }}" : string.Empty;
 
@@ -641,10 +662,10 @@ public {className}(IContainer Base{fromConstructor})
 {string.Join("\n", booleans.Select(b => b.Split(' ').Last()).Select(b => $"\t this.{b} = Base.GetBoolean(\"{b}\");"))}
     
     m_lookup = new({dictSize}) {{
-{MakeDictionary(interfaceInjectors)}
-{MakeDictionary(localizedParameters)}
-{MakeDictionary(requested)}
-{MakeDictionary(constructorParameters)}
+{MakeDictionaryFromTypes(interfaceTypePairs)}
+{MakeDictionaryFromParams(localizedParamPairs)}
+{MakeDictionaryFromTypes(requestedPairs)}
+{MakeDictionaryFromParams(constructorParamPairs)}
     }};
     m_booleans = new();
     foreach(var (key, value) in Base.GetBooleans())
@@ -665,10 +686,10 @@ public partial class {className}
         {constructorAssignments}
         
         m_lookup = new({dictSize})  {{
-{MakeDictionary(interfaceInjectors)}
-{MakeDictionary(localizedParameters)}
-{MakeDictionary(requested)}
-{MakeDictionary(constructorParameters)}
+{MakeDictionaryFromTypes(interfaceTypePairs)}
+{MakeDictionaryFromParams(localizedParamPairs)}
+{MakeDictionaryFromTypes(requestedPairs)}
+{MakeDictionaryFromParams(constructorParamPairs)}
         }};
         
     m_booleans = new({booleans.Count}) {{
@@ -699,36 +720,39 @@ public partial class {className}
 }}";
         }
 
-        private static void MakeArray(Dictionary<string, string> declarations, string name, INamedTypeSymbol type,
-                                      Dictionary<INamedTypeSymbol, List<Injection>> interfaceInjectors, bool function = false)
+        private static void MakeArray(Dictionary<string, string> declarations, string name,
+                                      string elementTypeFullName, string elementTypeMemberName,
+                                      Dictionary<string, List<InjectionData>> interfaceInjectors, bool function = false)
         {
-            var factoryName = $"new {type}[0]";
+            var factoryName = $"new {elementTypeFullName}[0]";
             var factory = string.Empty;
             var functionString = function ? "()" : string.Empty;
             var starter = function ? string.Empty : "get {";
             var ender = function ? string.Empty : "}";
-            if (interfaceInjectors.TryGetValue(type, out var injections))
+            if (interfaceInjectors.TryGetValue(elementTypeFullName, out var injections))
             {
                 factoryName = $"Create{name}()".Replace("_", "");
+                var nonBooleanInjections = injections.Where(i => i.BooleanInjection == null).ToList();
+                var booleanInjections = injections.Where(b => b.BooleanInjection != null).ToList();
                 factory = @$"
-    IEnumerable<{type}> {factoryName}
+    IEnumerable<{elementTypeFullName}> {factoryName}
     {{
-        if(Reentrant) return Array.Empty<{type}>();
+        if(Reentrant) return Array.Empty<{elementTypeFullName}>();
         Reentrant = true;
-        List<{type}> source = new List<{type}> {{ 
-            {string.Join(",\n\t\t\t", injections.Where(i => i.BooleanInjection == null).Select(i => i.Name))} 
+        var source = new List<{elementTypeFullName}>({nonBooleanInjections.Count}) {{ 
+            {string.Join(",\n\t\t\t", nonBooleanInjections.Select(i => i.Name))} 
         }};
-        {string.Join("\n\t\t\t", injections.Where(b => b.BooleanInjection != null).Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
+        {string.Join("\n\t\t\t", booleanInjections.Select(i => $"if({i.BooleanInjection!.Key}) source.Add({i.Name});"))}
         var b = Base;
         while(b is not null)
         {{
-            if(b.TryResolve<IEnumerable<{type}>>(out var additional)) source.AddRange(additional!);
+            if(b.TryResolve<IEnumerable<{elementTypeFullName}>>(out var additional)) source.AddRange(additional!);
             b = b.Base;
         }}
         b = Inheritor;
         while(b is not null)
         {{
-            if(b.TryResolve<IEnumerable<{type}>>(out var additional)) source.AddRange(additional!);
+            if(b.TryResolve<IEnumerable<{elementTypeFullName}>>(out var additional)) source.AddRange(additional!);
             b = b.Inheritor;
         }}
         Reentrant = false;
@@ -736,43 +760,149 @@ public partial class {className}
     }}";
             }
             declarations[name] = $@"
-    internal IEnumerable<{type}> {name}{functionString}
+    internal IEnumerable<{elementTypeFullName}> {name}{functionString}
     {{
         {starter}
-        if (m_{name} != null)
-            return m_{name};
+        var cached = m_{name};
+        if (cached != null)
+            return cached;
 
         lock (m_lock)
         {{
-            if (m_{name} != null)
-                return m_{name};
+            cached = m_{name};
+            if (cached != null)
+                return cached;
             return m_{name} = {factoryName};
         }}
         {ender}
     }} 
-    internal IEnumerable<{type}>? m_{name};" + factory;
+    internal IEnumerable<{elementTypeFullName}>? m_{name};" + factory;
         }
 
-        private static string MakeDictionary(IEnumerable<INamedTypeSymbol> types)
+        private static string MakeDictionaryFromTypes(IEnumerable<(string TypeName, string MemberName)> pairs)
         {
-            StringBuilder builder = new();
-            foreach (var type in types)
-            {
-                builder.AppendLine($"\t\t\t{{ typeof({type}),{SymbolUtility.MemberName(type).Replace("()", "")} }},");
-            }
-
+            var builder = new StringBuilder();
+            foreach (var (typeName, memberName) in pairs)
+                builder.AppendLine($"\t\t\t{{ typeof({typeName}),{memberName} }},");
             return builder.ToString();
         }
 
-        private static string MakeDictionary(IEnumerable<IParameterSymbol> parameters)
+        private static string MakeDictionaryFromParams(IEnumerable<(string TypeName, string ParamName)> pairs)
         {
-            StringBuilder builder = new();
+            var builder = new StringBuilder();
+            foreach (var (typeName, paramName) in pairs)
+                builder.AppendLine($"\t\t\t{{ typeof({typeName}), () => {paramName} }},");
+            return builder.ToString();
+        }
+
+        private static string Declaration(InjectionData injection, ImmutableArray<string> availableInterfaceFullNames, bool forLifetimeScope)
+        {
+            var name = injection.Name;
+            var lazyName = injection.LazyFieldName;
+            var creation = CreationCall(injection, availableInterfaceFullNames);
+
+            if (forLifetimeScope && injection.Singleton)
+                return $"internal {injection.TypeFullName} {name} => m_fallback.{name};";
+
+            if (injection.Singleton || injection.Scoped)
+                return SymbolUtility.SingletonFactory(injection.TypeFullName, name, lazyName, creation, injection.Disposable);
+
+            if (injection.Disposable)
+                return SymbolUtility.DisposableFactory(injection.TypeFullName, name, creation);
+
+            return $"internal {injection.TypeFullName} {name} => {creation};";
+        }
+
+        private static string CreationCall(InjectionData injection, ImmutableArray<string> availableInterfaceFullNames)
+        {
+            if (injection.Lambda is LambdaData lambda)
+            {
+                if (!availableInterfaceFullNames.Contains(lambda.ContainingTypeFullName))
+                    throw new Exception(
+                        $"Could not find any [Inject]ed implementations of {lambda.ContainingTypeFullName} to use as the source for the injection of {lambda.ContainingTypeFullName}.{lambda.MemberName}. Please provide at least one injection of the type {lambda.ContainingTypeFullName}.");
+
+                if (lambda.IsMethod)
+                    return $"{lambda.ContainingTypeMemberName}.{lambda.MemberName}{MakeMethodCall(lambda.MethodParameters, null)}";
+                else
+                    return $"{lambda.ContainingTypeMemberName}.{lambda.MemberName}";
+            }
+
+            HashSet<ParameterData>? missing = null;
+            var ctor = GetBestConstructor(injection, availableInterfaceFullNames, ref missing);
+            if (ctor is null)
+                throw new Exception($"No Construction method for {injection.TypeFullName}. Lambda was null.");
+
+            return $"new {injection.TypeFullName}{MakeConstructorCall(ctor, missing)}";
+        }
+
+        private static ConstructorData? GetBestConstructor(InjectionData injection,
+            ImmutableArray<string> availableInterfaceFullNames, ref HashSet<ParameterData>? missing)
+        {
+            missing = null;
+            ConstructorData? chosen = null;
+            foreach (var ctor in injection.Constructors)
+            {
+                var valid = true;
+                var localMissing = new HashSet<ParameterData>();
+                foreach (var parameter in ctor.Parameters)
+                {
+                    if (availableInterfaceFullNames.Contains(parameter.TypeFullName)) continue;
+                    if (parameter.HasExplicitDefault) continue;
+                    if (parameter.IsParams) continue;
+                    valid = false;
+                    localMissing.Add(parameter);
+                }
+
+                if (valid)
+                {
+                    chosen = ctor;
+                    missing = null;
+                    break;
+                }
+
+                if ((missing?.Count ?? int.MaxValue) <= localMissing.Count) continue;
+                chosen = ctor;
+                missing = localMissing;
+            }
+            return chosen;
+        }
+
+        private static IEnumerable<ParameterData> GetBestConstructorMissing(InjectionData injection,
+            ImmutableArray<string> availableInterfaceFullNames)
+        {
+            HashSet<ParameterData>? missing = null;
+            GetBestConstructor(injection, availableInterfaceFullNames, ref missing);
+            return missing ?? Enumerable.Empty<ParameterData>();
+        }
+
+        private static string MakeConstructorCall(ConstructorData ctor, HashSet<ParameterData>? missing)
+        {
+            var args = new List<string>();
+            foreach (var parameter in ctor.Parameters)
+            {
+                if (missing?.Contains(parameter) == true)
+                {
+                    args.Add(parameter.Name);
+                    continue;
+                }
+                args.Add(parameter.TypeMemberName + "()");
+            }
+            return $"({string.Join(", ", args)})";
+        }
+
+        private static string MakeMethodCall(ImmutableArray<ParameterData> parameters, HashSet<ParameterData>? missing)
+        {
+            var args = new List<string>();
             foreach (var parameter in parameters)
             {
-                builder.AppendLine($"\t\t\t{{ typeof({parameter.Type}), () => {parameter.Name} }},");
+                if (missing?.Contains(parameter) == true)
+                {
+                    args.Add(parameter.Name);
+                    continue;
+                }
+                args.Add(parameter.TypeMemberName + "()");
             }
-
-            return builder.ToString();
+            return $"({string.Join(", ", args)})";
         }
     }
 }

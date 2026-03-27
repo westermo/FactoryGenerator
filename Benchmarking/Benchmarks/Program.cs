@@ -7,6 +7,7 @@ using Inheritor.Generated;
 
 namespace Benchmarks;
 
+[MemoryDiagnoser]
 [JsonExporterAttribute.Full]
 [JsonExporterAttribute.FullCompressed]
 public class ResolveBenchmarks
