@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1772785898972,
+  "lastUpdate": 1774616234584,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -486,6 +486,72 @@ window.BENCHMARK_DATA = {
             "value": 1026.735672124227,
             "unit": "ns",
             "range": "± 14.016097837701734"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "661b7d377378cacf3c752d944bf784e2bf39548e",
+          "message": "Merge pull request #25 from westermo/performance\n\nRefactor: Remove Symbol references earlier",
+          "timestamp": "2026-03-27T13:54:07+01:00",
+          "tree_id": "09822e3e074c00f8af8ebab9ece6bc56efb4ec6a",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/661b7d377378cacf3c752d944bf784e2bf39548e"
+        },
+        "date": 1774616234284,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 127.601979970932,
+            "unit": "ns",
+            "range": "± 1.1240011269753352"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 16.91669885069132,
+            "unit": "ns",
+            "range": "± 0.011919106771031538"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 16.492653998044823,
+            "unit": "ns",
+            "range": "± 0.03099090820435037"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 20.109390860795976,
+            "unit": "ns",
+            "range": "± 0.12092091007765415"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveArray",
+            "value": 17.303536637624106,
+            "unit": "ns",
+            "range": "± 0.10451222969059602"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 920.5143372217814,
+            "unit": "ns",
+            "range": "± 9.834548746865531"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateFromSelf",
+            "value": 1039.5322314671107,
+            "unit": "ns",
+            "range": "± 14.97901439649252"
           }
         ]
       }
