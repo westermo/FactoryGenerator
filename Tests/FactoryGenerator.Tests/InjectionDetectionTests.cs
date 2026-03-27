@@ -259,6 +259,46 @@ public class InjectionDetectionTests()
         newContainer.GetBoolean("B").ShouldBe(true);
         newContainer.GetBoolean("C").ShouldBe(false);
     }
+
+    // ── Nullable parameter tests ──────────────────────────────────────────────
+
+    [Fact]
+    public void NullableUnregisteredParameterDefaultsToNull()
+    {
+        m_container.Resolve<NullableConsumer>().Optional.ShouldBeNull();
+    }
+
+    [Fact]
+    public void NullableRegisteredParameterIsResolved()
+    {
+        m_container.Resolve<NullablePresentConsumer>().Optional.ShouldBeOfType<NullablePresent>();
+    }
+
+    // ── Collection constructor parameter tests ────────────────────────────────
+
+    [Fact]
+    public void ArrayConstructorParameterIsResolved()
+    {
+        m_container.Resolve<ArrayParameterConsumer>().Arrays.Length.ShouldBe(3);
+    }
+
+    [Fact]
+    public void ListConstructorParameterIsResolved()
+    {
+        m_container.Resolve<ListConsumer>().Arrays.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public void ImmutableArrayConstructorParameterIsResolved()
+    {
+        m_container.Resolve<ImmutableArrayConsumer>().Arrays.Length.ShouldBe(3);
+    }
+
+    [Fact]
+    public void ReadOnlySpanConstructorParameterIsResolved()
+    {
+        m_container.Resolve<ReadOnlySpanConsumer>().Count.ShouldBe(3);
+    }
     private class DummyContainer : IContainer
     {
         public const string DummyText = "I am a bit of text";

@@ -51,16 +51,33 @@ namespace FactoryGenerator
             }
         }
 
-        internal static bool IsEnumerable(ITypeSymbol symbol)
+        internal static bool IsEnumerable(ITypeSymbol symbol) =>
+            GetCollectionKind(symbol) == CollectionKind.Enumerable;
+
+        internal static CollectionKind GetCollectionKind(ITypeSymbol symbol)
         {
-            if (symbol.SpecialType == SpecialType.System_Collections_IEnumerable) return true;
+            if (symbol is IArrayTypeSymbol) return CollectionKind.Array;
+
+            if (symbol.SpecialType == SpecialType.System_Collections_IEnumerable)
+                return CollectionKind.Enumerable;
+
             if (symbol is INamedTypeSymbol named)
             {
                 var fullName = named.ConstructedFrom.ToDisplayString();
-                if (fullName == "System.Collections.Generic.IEnumerable<T>") return true;
+                switch (fullName)
+                {
+                    case "System.Collections.Generic.IEnumerable<T>": return CollectionKind.Enumerable;
+                    case "System.Collections.Generic.List<T>":        return CollectionKind.List;
+                    case "System.Collections.Immutable.ImmutableArray<T>": return CollectionKind.ImmutableArray;
+                    case "System.ReadOnlySpan<T>":                    return CollectionKind.ReadOnlySpan;
+                }
             }
-            return symbol.Name == "IEnumerable" && symbol.ContainingNamespace?.ToDisplayString() is
-                "System.Collections.Generic" or "System.Collections";
+
+            if (symbol.Name == "IEnumerable" && symbol.ContainingNamespace?.ToDisplayString() is
+                    "System.Collections.Generic" or "System.Collections")
+                return CollectionKind.Enumerable;
+
+            return CollectionKind.None;
         }
 
         public static string MemberName(ISymbol? type)

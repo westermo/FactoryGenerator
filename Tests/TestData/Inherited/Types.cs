@@ -1,4 +1,6 @@
 ﻿using FactoryGenerator.Attributes;
+using System.Collections.Generic;
+using System.Collections.Immutable;
 
 namespace Inherited;
 
@@ -187,4 +189,52 @@ public class Scoped : IDisposable, IScoped
     {
         WasDisposed = true;
     }
+}
+
+// ── Nullable parameter tests ─────────────────────────────────────────────────
+
+/// <summary>Interface with no [Inject] implementation — intentionally unregistered.</summary>
+public interface INullableOptional;
+
+[Inject, Self]
+public class NullableConsumer(INullableOptional? optional)
+{
+    public INullableOptional? Optional { get; } = optional;
+}
+
+public interface INullablePresent;
+
+[Inject]
+public class NullablePresent : INullablePresent;
+
+[Inject, Self]
+public class NullablePresentConsumer(INullablePresent? optional)
+{
+    public INullablePresent? Optional { get; } = optional;
+}
+
+// ── Additional collection type tests ─────────────────────────────────────────
+
+[Inject, Self]
+public class ArrayParameterConsumer(IArray[] arrays)
+{
+    public IArray[] Arrays { get; } = arrays;
+}
+
+[Inject, Self]
+public class ListConsumer(List<IArray> arrays)
+{
+    public List<IArray> Arrays { get; } = arrays;
+}
+
+[Inject, Self]
+public class ImmutableArrayConsumer(ImmutableArray<IArray> arrays)
+{
+    public ImmutableArray<IArray> Arrays { get; } = arrays;
+}
+
+[Inject, Self]
+public class ReadOnlySpanConsumer(ReadOnlySpan<IArray> arrays)
+{
+    public int Count { get; } = arrays.Length;
 }
