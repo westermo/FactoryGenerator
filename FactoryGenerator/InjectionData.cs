@@ -5,6 +5,8 @@ using System.Linq;
 
 namespace FactoryGenerator
 {
+    public enum CollectionKind { None, Enumerable, Array, List, ImmutableArray, ReadOnlySpan }
+
     public sealed class InjectionData : IEquatable<InjectionData>
     {
         public string TypeFullName { get; }
@@ -87,34 +89,35 @@ namespace FactoryGenerator
     public sealed class ParameterData : IEquatable<ParameterData>
     {
         public string TypeFullName { get; }
-        public string TypeMemberName { get; }   // MemberName(param.Type) without "()"
+        public string TypeMemberName { get; }            // MemberName(param.Type) without "()"
         public bool HasExplicitDefault { get; }
         public bool IsParams { get; }
-        public string Name { get; }             // parameter.Name
-        public bool IsEnumerable { get; }
-        public string? EnumerableElementFullName { get; }
-        public string? EnumerableElementMemberName { get; }  // without "()"
-        public bool IsArrayType { get; }
-        public string? ArrayElementFullName { get; }
-        public string? ArrayElementMemberName { get; }       // without "()"
+        public string Name { get; }                      // parameter.Name
+        public CollectionKind CollectionKind { get; }
+        public string? CollectionElementFullName { get; }
+        public string? CollectionElementMemberName { get; } // without "()"
+        public bool IsNullable { get; }
+
+        // Convenience
+        public bool IsCollection => CollectionKind != CollectionKind.None;
+        public bool IsEnumerable => CollectionKind == CollectionKind.Enumerable;
+        public bool IsArrayType => CollectionKind == CollectionKind.Array;
 
         public ParameterData(
             string typeFullName, string typeMemberName,
             bool hasExplicitDefault, bool isParams, string name,
-            bool isEnumerable, string? enumerableElementFullName, string? enumerableElementMemberName,
-            bool isArrayType, string? arrayElementFullName, string? arrayElementMemberName)
+            CollectionKind collectionKind, string? collectionElementFullName, string? collectionElementMemberName,
+            bool isNullable)
         {
             TypeFullName = typeFullName;
             TypeMemberName = typeMemberName;
             HasExplicitDefault = hasExplicitDefault;
             IsParams = isParams;
             Name = name;
-            IsEnumerable = isEnumerable;
-            EnumerableElementFullName = enumerableElementFullName;
-            EnumerableElementMemberName = enumerableElementMemberName;
-            IsArrayType = isArrayType;
-            ArrayElementFullName = arrayElementFullName;
-            ArrayElementMemberName = arrayElementMemberName;
+            CollectionKind = collectionKind;
+            CollectionElementFullName = collectionElementFullName;
+            CollectionElementMemberName = collectionElementMemberName;
+            IsNullable = isNullable;
         }
 
         public bool Equals(ParameterData? other)
@@ -126,12 +129,10 @@ namespace FactoryGenerator
                 && HasExplicitDefault == other.HasExplicitDefault
                 && IsParams == other.IsParams
                 && Name == other.Name
-                && IsEnumerable == other.IsEnumerable
-                && EnumerableElementFullName == other.EnumerableElementFullName
-                && EnumerableElementMemberName == other.EnumerableElementMemberName
-                && IsArrayType == other.IsArrayType
-                && ArrayElementFullName == other.ArrayElementFullName
-                && ArrayElementMemberName == other.ArrayElementMemberName;
+                && CollectionKind == other.CollectionKind
+                && CollectionElementFullName == other.CollectionElementFullName
+                && CollectionElementMemberName == other.CollectionElementMemberName
+                && IsNullable == other.IsNullable;
         }
 
         public override bool Equals(object? obj) => obj is ParameterData other && Equals(other);

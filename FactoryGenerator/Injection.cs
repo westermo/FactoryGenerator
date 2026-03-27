@@ -136,29 +136,30 @@ namespace FactoryGenerator
         {
             var typeFullName = parameter.Type.ToString()!;
             var typeMemberName = SymbolUtility.MemberName(parameter.Type).Replace("()", "");
+            var isNullable = parameter.Type.NullableAnnotation == NullableAnnotation.Annotated;
 
-            var isEnumerable = SymbolUtility.IsEnumerable(parameter.Type);
-            string? enumElemFull = null, enumElemMember = null;
-            if (isEnumerable && parameter.Type is INamedTypeSymbol namedEnum && namedEnum.TypeArguments.Length == 1)
+            var collectionKind = SymbolUtility.GetCollectionKind(parameter.Type);
+            string? elemFull = null, elemMember = null;
+            if (collectionKind != CollectionKind.None)
             {
-                var elem = namedEnum.TypeArguments[0];
-                enumElemFull = elem.ToString()!;
-                enumElemMember = SymbolUtility.MemberName(elem).Replace("()", "");
-            }
+                ITypeSymbol? elemType = null;
+                if (parameter.Type is INamedTypeSymbol namedType && namedType.TypeArguments.Length == 1)
+                    elemType = namedType.TypeArguments[0];
+                else if (parameter.Type is IArrayTypeSymbol arrType)
+                    elemType = arrType.ElementType;
 
-            var isArray = parameter.Type is IArrayTypeSymbol;
-            string? arrElemFull = null, arrElemMember = null;
-            if (isArray && parameter.Type is IArrayTypeSymbol arrType && arrType.ElementType is INamedTypeSymbol arrElem)
-            {
-                arrElemFull = arrElem.ToString()!;
-                arrElemMember = SymbolUtility.MemberName(arrElem).Replace("()", "");
+                if (elemType is not null)
+                {
+                    elemFull = elemType.ToString()!;
+                    elemMember = SymbolUtility.MemberName(elemType).Replace("()", "");
+                }
             }
 
             return new ParameterData(
                 typeFullName, typeMemberName,
                 parameter.HasExplicitDefaultValue, parameter.IsParams, parameter.Name,
-                isEnumerable, enumElemFull, enumElemMember,
-                isArray, arrElemFull, arrElemMember);
+                collectionKind, elemFull, elemMember,
+                isNullable);
         }
 
         private static BooleanInjection? HandleBoolean(AttributeData attributeData)
