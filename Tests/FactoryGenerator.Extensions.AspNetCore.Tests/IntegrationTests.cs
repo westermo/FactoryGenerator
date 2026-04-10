@@ -1,4 +1,4 @@
-﻿using System.Net;
+using System.Net;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
@@ -7,7 +7,6 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
-using Xunit;
 using FactoryGenerator;
 using FactoryGenerator.Attributes;
 using FactoryGenerator.Extensions.AspNetCore;
@@ -37,7 +36,7 @@ public class OtherService : IOtherService
 
 public class IntegrationTests
 {
-    [Fact]
+    [Test]
     public async Task Middleware_Integrates_FactoryGenerator_With_RequestServices()
     {
         // Setup
