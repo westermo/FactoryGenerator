@@ -299,6 +299,51 @@ public class InjectionDetectionTests()
     {
         m_container.Resolve<ReadOnlySpanConsumer>().Count.ShouldBe(3);
     }
+
+    // ── Cross-array reentrancy tests ──────────────────────────────────────────
+    // Ensures that reentrancy guards are per-array-type, not global.  Resolving
+    // IEnumerable<ICrossArrayA> triggers construction of CrossA3 which needs
+    // IEnumerable<ICrossArrayB>.  That second resolution must not be blocked.
+
+    [Fact]
+    public void CrossArrayReentrancyResolvesAllA()
+    {
+        var items = m_container.Resolve<CrossArrayConsumer>().Items.ToList();
+        items.Count.ShouldBe(3);
+    }
+
+    [Fact]
+    public void CrossArrayReentrancyResolvesBInsideCrossA3()
+    {
+        var items = m_container.Resolve<CrossArrayConsumer>().Items.ToList();
+        var crossA3 = items.OfType<CrossA3>().ShouldHaveSingleItem();
+        crossA3.Deps.Count().ShouldBe(2);
+    }
+
+    // ── Inheritor + Base array tests ──────────────────────────────────────────
+
+    [Fact]
+    public void InheritorAndBaseContainerMergeArrays()
+    {
+        var parent = new DependencyInjectionContainer(false, false, new NonInjectedClass());
+        var child = new DependencyInjectionContainer(parent);
+        // Inherited defines SplitBase1 + SplitBase2 (2 items per container).
+        // Inheritor defines SplitInheritor1..3 (3 more per container).
+        // Each standalone container has 5.  After merging, the child sees its own 5
+        // plus the parent's 5 = 10.
+        child.Resolve<SplitArrayConsumer>().Items.Count().ShouldBe(10);
+    }
+
+    [Fact]
+    public void BaseContainerSeesInheritorArraysAfterLinking()
+    {
+        var parent = new DependencyInjectionContainer(false, false, new NonInjectedClass());
+        var child = new DependencyInjectionContainer(parent);
+        // After linking, the parent's Inheritor is the child.  Resolving on the
+        // parent should now include its own 5 plus the child's 5 = 10.
+        parent.Resolve<SplitArrayConsumer>().Items.Count().ShouldBe(10);
+    }
+
     private class DummyContainer : IContainer
     {
         public const string DummyText = "I am a bit of text";
