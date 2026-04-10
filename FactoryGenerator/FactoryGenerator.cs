@@ -167,7 +167,6 @@ namespace {compilation.Assembly.Name}.Generated;
 public sealed partial class {ClassName} : IContainer
 {{
     
-    private bool Reentrant;
 #pragma warning restore CS0169, CS0414
     private IContainer GetRoot()
     {{
@@ -453,7 +452,6 @@ public sealed partial class {ClassName} : IContainer
 #pragma warning disable CS0169, CS0414
 public sealed partial class LifetimeScope : IContainer
 {{
-    private bool Reentrant;
 #pragma warning restore CS0169, CS0414
     private IContainer GetRoot()
     {{
@@ -727,10 +725,11 @@ public partial class {className}
                 var nonBooleanInjections = injections.Where(i => i.BooleanInjection == null).ToList();
                 var booleanInjections = injections.Where(b => b.BooleanInjection != null).ToList();
                 factory = @$"
+    private bool Reentrant_{name};
     IEnumerable<{elementTypeFullName}> {factoryName}
     {{
-        if(Reentrant) return Array.Empty<{elementTypeFullName}>();
-        Reentrant = true;
+        if(Reentrant_{name}) return Array.Empty<{elementTypeFullName}>();
+        Reentrant_{name} = true;
         var source = new List<{elementTypeFullName}>({nonBooleanInjections.Count}) {{ 
             {string.Join(",\n\t\t\t", nonBooleanInjections.Select(i => i.Name))} 
         }};
@@ -747,7 +746,7 @@ public partial class {className}
             if(b.TryResolve<IEnumerable<{elementTypeFullName}>>(out var additional)) source.AddRange(additional!);
             b = b.Inheritor;
         }}
-        Reentrant = false;
+        Reentrant_{name} = false;
         return source;
     }}";
             }
