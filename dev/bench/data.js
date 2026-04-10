@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1774621582180,
+  "lastUpdate": 1775829489579,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -618,6 +618,72 @@ window.BENCHMARK_DATA = {
             "value": 1324.8772699038188,
             "unit": "ns",
             "range": "± 14.731985050281342"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "carl.andersson@westermo.com",
+            "name": "caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "carl.andersson@westermo.com",
+            "name": "caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "distinct": true,
+          "id": "31d89de321161a1b341183ff3526540cac745564",
+          "message": "Refactor: Replace single Reentrant flag with unique flags for each factory to prevent reentrancy issues",
+          "timestamp": "2026-04-10T15:54:45+02:00",
+          "tree_id": "33f9039ad84c5b2b94f3947d1f9b342562f0fe90",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/31d89de321161a1b341183ff3526540cac745564"
+        },
+        "date": 1775829489208,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 131.51139719669635,
+            "unit": "ns",
+            "range": "± 0.8678036260458275"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 21.08378767967224,
+            "unit": "ns",
+            "range": "± 0.038262049132535406"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 19.01669285127095,
+            "unit": "ns",
+            "range": "± 0.02555845032563843"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 20.70971505443255,
+            "unit": "ns",
+            "range": "± 0.21411049308001395"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveArray",
+            "value": 18.66660215705633,
+            "unit": "ns",
+            "range": "± 0.01900678447402795"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 1111.1817757924398,
+            "unit": "ns",
+            "range": "± 6.629561877912441"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateFromSelf",
+            "value": 1236.4383230845133,
+            "unit": "ns",
+            "range": "± 16.28010887606745"
           }
         ]
       }
