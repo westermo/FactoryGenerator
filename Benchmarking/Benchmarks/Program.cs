@@ -7,6 +7,8 @@ using Inheritor.Generated;
 
 namespace Benchmarks;
 
+// ── Dictionary-based resolution (existing path) ──────────────────────────────
+
 [MemoryDiagnoser]
 [JsonExporterAttribute.Full]
 [JsonExporterAttribute.FullCompressed]
@@ -36,10 +38,38 @@ public class ResolveBenchmarks
     public IContainer CreateFromSelf() => new DependencyInjectionContainer(m_container);
 }
 
+// ── Static-extension resolution (C# 14 / .NET 10+ path) ─────────────────────
+//
+// Each Resolve(container?) call inlines the full construction chain directly —
+// no dictionary lookup, no factory-method indirection.
+//
+// Null-container variants bypass the singleton cache entirely and perform a
+// fresh allocation on every call, exposing the raw construction cost.
+
+[MemoryDiagnoser]
+[JsonExporterAttribute.Full]
+[JsonExporterAttribute.FullCompressed]
+public class StaticExtensionBenchmarks
+{
+    private readonly DependencyInjectionContainer m_container = new(default, default, new NonInjectedClass());
+    [Benchmark]
+    public ISingleton ExtensionResolveSingleton() => ISingleton.Resolve(m_container);
+    [Benchmark]
+    public ISingleton ExtensionResolveSingletonNullContainer() => ISingleton.Resolve(null);
+    [Benchmark]
+    public IOverridable ExtensionResolveTransient() => IOverridable.Resolve(m_container);
+    [Benchmark]
+    public ChainA ExtensionResolveChain() => ChainA.Resolve(m_container);
+    [Benchmark]
+    public ChainA ExtensionResolveChainNullContainer() => ChainA.Resolve(null);
+    [Benchmark]
+    public ArrayConsumer ExtensionResolveWithCollection() => ArrayConsumer.Resolve(m_container);
+    [Benchmark]
+    public ArrayConsumer ExtensionResolveWithCollectionNullContainer() => ArrayConsumer.Resolve(null);
+}
+
 internal static class Program
 {
-    private static void Main(string[] args)
-    {
-        var summary = BenchmarkRunner.Run<ResolveBenchmarks>();
-    }
+    private static void Main(string[] args) =>
+        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 }

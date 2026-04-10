@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using System.Threading;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.CodeAnalysis.Diagnostics;
 
@@ -33,6 +34,10 @@ namespace FactoryGenerator
                                       .Collect();
             var combined = attributes.Combine(compilation).Combine(syntaxUsages).Combine(logProvider);
             context.RegisterSourceOutput(combined, MakeAutofacModule);
+
+            var supportsStaticExtensions = context.ParseOptionsProvider.Select(IsAtLeastCSharp14);
+            var extensionData = attributes.Combine(compilation).Combine(supportsStaticExtensions);
+            context.RegisterSourceOutput(extensionData, MakeStaticExtensions);
         }
 
         private IncrementalValueProvider<LoggingOptions?> SetupLog(IncrementalGeneratorInitializationContext context)
@@ -188,12 +193,12 @@ public sealed partial class {ClassName} : IContainer
     }}
     public IContainer? Base {{ get; }}
     public IContainer? Inheritor {{ get; set; }}
-    private readonly object m_lock = new();
+    internal readonly object m_lock = new();
     private Dictionary<Type,Func<object>> m_lookup;
     private Dictionary<string,bool> m_booleans;
     private List<WeakReference<IDisposable>>? resolvedInstances;
 
-    private List<WeakReference<IDisposable>> GetResolvedInstances()
+    internal List<WeakReference<IDisposable>> GetResolvedInstances()
     {{
         if (resolvedInstances is null)
             lock (m_lock)
@@ -381,7 +386,7 @@ public sealed partial class {ClassName} : IContainer
             {
                 if (!parameter.IsCollection) continue;
                 if (parameter.CollectionElementFullName is null) continue;
-                var name = parameter.Name;
+                var name = "coll_" + parameter.CollectionElementMemberName!;
                 log.Log(LogLevel.Debug, $"Creating Collection: {name} of element type {parameter.CollectionElementFullName}");
                 MakeArray(arrayDeclarations, name, parameter.CollectionElementFullName, parameter.CollectionElementMemberName!, interfaceInjectors);
                 constructorParameters.Remove(parameter);
@@ -422,7 +427,7 @@ public sealed partial class {ClassName} : IContainer
             var lifetimeParameters = string.Join(", ", allParameters);
 
             log.Log(LogLevel.Debug, $"Resulting Constructor: {constructor}");
-            var constructorFields = string.Join("\n\t", allArguments.Select(arg => arg + ";"));
+            var constructorFields = string.Join("\n\t", allArguments.Select(arg => "internal " + arg + ";"));
             var constructorAssignments = string.Join("\n\t\t",
                 allArguments.Select(arg => arg.Split(' ').Last()).Select(arg => $"this.{arg} = {arg};"));
             var resolvedConstructorAssignments = string.Join("\n\t\t",
@@ -433,7 +438,7 @@ public sealed partial class {ClassName} : IContainer
             // ReadOnlySpan is a ref struct and cannot be placed in the lookup dictionary
             var localizedForDict = localizedParameters.Where(p => p.CollectionKind != CollectionKind.ReadOnlySpan).ToList();
             var localizedPairs = localizedForDict
-                .Select(p => (TypeName: p.TypeFullName, Expression: CollectionDictExpression(p.CollectionKind, p.Name)))
+                .Select(p => (TypeName: p.TypeFullName, Expression: CollectionDictExpression(p.CollectionKind, "coll_" + p.CollectionElementMemberName!)))
                 .ToList();
             var requestedPairs = requestedUsages.Select(u => (TypeName: u.FullName, MemberName: u.MemberName)).ToList();
             var constructorPairs = constructorParameters.Select(p => (TypeName: p.TypeFullName, Expression: p.Name)).ToList();
@@ -480,13 +485,13 @@ public sealed partial class LifetimeScope : IContainer
         GetResolvedInstances().Add(new WeakReference<IDisposable>(scope));
         return scope;
     }}
-    private readonly object m_lock = new();
+    internal readonly object m_lock = new();
     private {ClassName} m_fallback;
     private Dictionary<Type,Func<object>> m_lookup;
     private Dictionary<string,bool> m_booleans;
     private List<WeakReference<IDisposable>>? resolvedInstances;
 
-    private List<WeakReference<IDisposable>> GetResolvedInstances()
+    internal List<WeakReference<IDisposable>> GetResolvedInstances()
     {{
         if (resolvedInstances is null)
             lock (m_lock)
@@ -583,17 +588,16 @@ public sealed partial class LifetimeScope : IContainer
 
         private static void CheckForCycles(ImmutableArray<InjectionData> dataInjections)
         {
-            var tree = new Dictionary<string, List<string>>();
+            // Build adjacency list: interface/type name → set of dependency names
+            var graph = new Dictionary<string, HashSet<string>>();
+            // Map each interface name back to its concrete type for error messages
+            var nodeOwner = new Dictionary<string, string>();
+
             foreach (var injection in dataInjections)
             {
                 if (injection.Lambda != null) continue;
-                var node = new List<string>();
-                foreach (var ifaceName in injection.InterfaceFullNames)
-                {
-                    if (!tree.ContainsKey(ifaceName))
-                        tree[ifaceName] = node;
-                }
 
+                var deps = new HashSet<string>();
                 foreach (var ctor in injection.Constructors)
                 {
                     foreach (var parameter in ctor.Parameters)
@@ -612,19 +616,70 @@ public sealed partial class LifetimeScope : IContainer
                                 : parameter.TypeFullName;
                         }
 
-                        node.Add(depName);
-                        if (tree.TryGetValue(depName, out var list))
-                        {
-                            foreach (var ifaceName in injection.InterfaceFullNames)
-                            {
-                                if (list.Contains(ifaceName))
-                                    throw new InvalidOperationException(
-                                        $"Cyclic Dependency Detected between {injection.TypeFullName} and {ifaceName}");
-                            }
-                        }
+                        deps.Add(depName);
+                    }
+                }
+
+                foreach (var ifaceName in injection.InterfaceFullNames)
+                {
+                    if (!graph.ContainsKey(ifaceName))
+                    {
+                        graph[ifaceName] = deps;
+                        nodeOwner[ifaceName] = injection.TypeFullName;
+                    }
+                    else
+                    {
+                        // Multiple implementations of the same interface — merge edges
+                        foreach (var d in deps)
+                            graph[ifaceName].Add(d);
                     }
                 }
             }
+
+            // DFS-based cycle detection
+            // 0 = unvisited, 1 = in-progress (on current path), 2 = done
+            var state = new Dictionary<string, int>();
+            var path = new List<string>();
+
+            foreach (var node in graph.Keys)
+            {
+                if (!state.TryGetValue(node, out var s) || s == 0)
+                    DfsCycleCheck(node, graph, state, path, nodeOwner);
+            }
+        }
+
+        private static void DfsCycleCheck(string node, Dictionary<string, HashSet<string>> graph,
+                                          Dictionary<string, int> state, List<string> path,
+                                          Dictionary<string, string> nodeOwner)
+        {
+            state[node] = 1; // in-progress
+            path.Add(node);
+
+            if (graph.TryGetValue(node, out var deps))
+            {
+                foreach (var dep in deps)
+                {
+                    state.TryGetValue(dep, out var depState);
+                    if (depState == 1)
+                    {
+                        // Back-edge found — extract the cycle
+                        var cycleStart = path.IndexOf(dep);
+                        var cycle = path.GetRange(cycleStart, path.Count - cycleStart);
+                        cycle.Add(dep);
+                        string owner;
+                        if (!nodeOwner.TryGetValue(node, out owner))
+                            owner = node;
+                        throw new InvalidOperationException(
+                            $"Cyclic Dependency Detected: {string.Join(" \u2192 ", cycle)} (via {owner})");
+                    }
+
+                    if (depState == 0 && graph.ContainsKey(dep))
+                        DfsCycleCheck(dep, graph, state, path, nodeOwner);
+                }
+            }
+
+            path.RemoveAt(path.Count - 1);
+            state[node] = 2; // done
         }
 
         private static string Constructor(string usingStatements, string constructorFields, string constructor, string constructorAssignments, int dictSize,
@@ -949,15 +1004,20 @@ public partial class {className}
         /// in a generated constructor call. Collection params are converted from the cached
         /// IEnumerable&lt;T&gt; factory to the exact type requested.
         /// </summary>
-        private static string CollectionConstructorArg(ParameterData parameter) =>
-            parameter.CollectionKind switch
+        private static string CollectionConstructorArg(ParameterData parameter)
+        {
+            if (!parameter.IsCollection)
+                return parameter.Name;
+            var memberName = "coll_" + parameter.CollectionElementMemberName!;
+            return parameter.CollectionKind switch
             {
-                CollectionKind.Array        => $"{parameter.Name}.ToArray()",
-                CollectionKind.List         => $"{parameter.Name}.ToList()",
-                CollectionKind.ImmutableArray => $"ImmutableArray.CreateRange({parameter.Name})",
-                CollectionKind.ReadOnlySpan => $"new global::System.ReadOnlySpan<{parameter.CollectionElementFullName}>({parameter.Name}.ToArray())",
-                _                           => parameter.Name, // Enumerable or plain missing → use name directly
+                CollectionKind.Array        => $"{memberName}.ToArray()",
+                CollectionKind.List         => $"{memberName}.ToList()",
+                CollectionKind.ImmutableArray => $"ImmutableArray.CreateRange({memberName})",
+                CollectionKind.ReadOnlySpan => $"new global::System.ReadOnlySpan<{parameter.CollectionElementFullName}>({memberName}.ToArray())",
+                _                           => memberName, // Enumerable → use element member name directly
             };
+        }
 
         /// <summary>
         /// Returns the expression used in the Func&lt;object&gt; lambda inside the lookup dictionary
@@ -971,5 +1031,273 @@ public partial class {className}
                 CollectionKind.ImmutableArray => $"ImmutableArray.CreateRange({factoryName})",
                 _                             => factoryName, // Enumerable → direct
             };
+
+        // ── C# 14 static-extension generation ────────────────────────────────────
+
+        private static bool IsAtLeastCSharp14(ParseOptions options, CancellationToken _)
+        {
+            if (options is not CSharpParseOptions csOptions) return false;
+            // C# 14 = 1400 in Roslyn's LanguageVersion enum.
+            // LanguageVersion.Preview == int.MaxValue, which is also >= 1400.
+            const int CSharp14 = 1400;
+            return (int)csOptions.LanguageVersion >= CSharp14;
+        }
+
+        private static void MakeStaticExtensions(
+            SourceProductionContext context,
+            ((ImmutableArray<InjectionData> Injections, Compilation Compilation) Left, bool SupportsExtensions) data)
+        {
+            if (!data.SupportsExtensions) return;
+            var source = GenerateStaticExtensions(data.Left.Injections, data.Left.Compilation);
+            context.AddSource("DependencyInjectionContainer.StaticExtensions.g.cs", source);
+        }
+
+        private static string GenerateStaticExtensions(
+            ImmutableArray<InjectionData> dataInjections, Compilation compilation)
+        {
+            var ordered = dataInjections.Reverse().ToList();
+            foreach (var injection in ordered.ToArray())
+            {
+                if (!injection.IsTestType) continue;
+                ordered.Remove(injection);
+                ordered.Add(injection);
+            }
+
+            var interfaceInjectors = new Dictionary<string, List<InjectionData>>();
+            var interfaceMemberNames = new Dictionary<string, string>();
+            foreach (var injection in ordered)
+            {
+                for (var i = 0; i < injection.InterfaceFullNames.Length; i++)
+                {
+                    var ifaceFull   = injection.InterfaceFullNames[i];
+                    var ifaceMember = injection.InterfaceMemberNames[i];
+                    if (!interfaceInjectors.ContainsKey(ifaceFull))
+                    {
+                        interfaceInjectors[ifaceFull]   = new List<InjectionData>();
+                        interfaceMemberNames[ifaceFull] = ifaceMember;
+                    }
+                    interfaceInjectors[ifaceFull].Add(injection);
+                }
+            }
+
+            var availableInterfaces = interfaceInjectors.Keys.ToImmutableArray();
+
+            var sb = new StringBuilder();
+            sb.AppendLine($@"using System.CodeDom.Compiler;
+namespace {compilation.Assembly.Name}.Generated;
+#nullable enable");
+
+            foreach (var kvp in interfaceMemberNames)
+            {
+                var ifaceFull    = kvp.Key;
+                var ifaceMember  = kvp.Value;
+                var possibilities = interfaceInjectors[ifaceFull];
+                var className    = ifaceMember + "Extensions";
+                var body         = StaticExtensionBody(ifaceFull, ifaceMember, possibilities, availableInterfaces);
+
+                sb.AppendLine($@"[GeneratedCode(""{ToolName}"", ""{Version}"")]
+public static class {className}
+{{
+    extension({ifaceFull})
+    {{
+{body}
+    }}
+}}");
+            }
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Produces the method declaration(s) that go inside an <c>extension(...)</c> block
+        /// for the given interface.
+        /// </summary>
+        private static string StaticExtensionBody(
+            string ifaceFull,
+            string ifaceMember,
+            List<InjectionData> possibilities,
+            ImmutableArray<string> availableInterfaces)
+        {
+            var hasBooleans = possibilities.Any(p => p.BooleanInjection != null);
+            var chosen      = possibilities.Last();
+
+            // Boolean-switched or lambda: the container already encodes all of that logic in its
+            // own factory method — call it directly (no dictionary) and fall back to inline
+            // construction when the container is absent.
+            if (hasBooleans || chosen.Lambda != null)
+            {
+                string nullFallback;
+                if (chosen.Lambda != null)
+                {
+                    nullFallback =
+                        $"throw new global::System.InvalidOperationException(" +
+                        $"\"Cannot resolve {ifaceFull} without a container\")";
+                }
+                else
+                {
+                    var fallbackImpl = possibilities.LastOrDefault(p => p.BooleanInjection == null);
+                    nullFallback = fallbackImpl != null
+                        ? InlineCreation(fallbackImpl, availableInterfaces, nullContainer: true)
+                        : $"throw new global::System.InvalidOperationException(" +
+                          $"\"Cannot resolve {ifaceFull} without a container\")";
+                }
+                return $"        public static {ifaceFull} Resolve({ClassName}? container) =>" +
+                       $" container?.{ifaceMember}() ?? {nullFallback};";
+            }
+
+            var creation     = InlineCreation(chosen, availableInterfaces, nullContainer: false);
+            var nullCreation = InlineCreation(chosen, availableInterfaces, nullContainer: true);
+
+            // Singleton / Scoped: inline double-checked locking directly against the container's
+            // cache field, bypassing both the dictionary and the factory-method call.
+            if (chosen.Singleton || chosen.Scoped)
+            {
+                if (chosen.Disposable)
+                {
+                    return $@"        public static {ifaceFull} Resolve({ClassName}? container)
+        {{
+            if (container != null)
+            {{
+                var cached = container.{chosen.LazyFieldName};
+                if (cached != null) return cached;
+                lock (container.m_lock)
+                {{
+                    cached = container.{chosen.LazyFieldName};
+                    if (cached != null) return cached;
+                    var value = {creation};
+                    container.GetResolvedInstances().Add(new global::System.WeakReference<global::System.IDisposable>(value));
+                    container.{chosen.LazyFieldName} = value;
+                    return value;
+                }}
+            }}
+            return {nullCreation};
+        }}";
+                }
+
+                return $@"        public static {ifaceFull} Resolve({ClassName}? container)
+        {{
+            if (container != null)
+            {{
+                var cached = container.{chosen.LazyFieldName};
+                if (cached != null) return cached;
+                lock (container.m_lock)
+                {{
+                    cached = container.{chosen.LazyFieldName};
+                    if (cached != null) return cached;
+                    return container.{chosen.LazyFieldName} = {creation};
+                }}
+            }}
+            return {nullCreation};
+        }}";
+            }
+
+            // Transient + disposable: construct and register for disposal tracking.
+            if (chosen.Disposable)
+            {
+                return $@"        public static {ifaceFull} Resolve({ClassName}? container)
+        {{
+            var value = {creation};
+            container?.GetResolvedInstances().Add(new global::System.WeakReference<global::System.IDisposable>(value));
+            return value;
+        }}";
+            }
+
+            // Transient, non-disposable: pure inline factory chain.
+            return $"        public static {ifaceFull} Resolve({ClassName}? container) => {creation};";
+        }
+
+        /// <summary>
+        /// Builds a <c>new ConcreteType(...)</c> expression for the given injection where every
+        /// DI-registered dependency is resolved via its own static <c>Resolve</c> extension.
+        /// </summary>
+        private static string InlineCreation(
+            InjectionData injection,
+            ImmutableArray<string> availableInterfaces,
+            bool nullContainer)
+        {
+            HashSet<ParameterData>? missing       = null;
+            HashSet<ParameterData>? nullableDefaults = null;
+            var ctor = GetBestConstructor(injection, availableInterfaces, ref missing, ref nullableDefaults);
+
+            if (ctor == null)
+                return $"default! /* no constructor found for {injection.TypeFullName} */";
+
+            var resolveArg = nullContainer ? "null" : "container";
+            var args       = new List<string>();
+
+            foreach (var parameter in ctor.Parameters)
+            {
+                // Nullable params with no DI registration → null
+                if (nullableDefaults?.Contains(parameter) == true)
+                {
+                    args.Add("null");
+                    continue;
+                }
+
+                var typeLookup = parameter.IsNullable
+                    ? parameter.TypeFullName.TrimEnd('?')
+                    : parameter.TypeFullName;
+
+                // DI-registered: recurse via the static extension
+                if (availableInterfaces.Contains(typeLookup))
+                {
+                    args.Add($"{typeLookup}.Resolve({resolveArg})");
+                    continue;
+                }
+
+                // C# will supply the default value — omit the argument
+                if (parameter.HasExplicitDefault)
+                    continue;
+
+                // Empty params array — omit
+                if (parameter.IsParams)
+                    continue;
+
+                // Collection: convert from the container's IEnumerable<T> lazy property to the
+                // exact collection type the constructor demands, mirroring CollectionConstructorArg.
+                if (parameter.IsCollection && parameter.CollectionElementFullName != null)
+                {
+                    var elemType = parameter.CollectionElementFullName;
+                    string collectionArg;
+                    if (nullContainer)
+                    {
+                        collectionArg = parameter.CollectionKind switch
+                        {
+                            CollectionKind.List          => $"new global::System.Collections.Generic.List<{elemType}>()",
+                            CollectionKind.ImmutableArray => $"global::System.Collections.Immutable.ImmutableArray<{elemType}>.Empty",
+                            CollectionKind.ReadOnlySpan  => $"global::System.ReadOnlySpan<{elemType}>.Empty",
+                            _                            => $"global::System.Array.Empty<{elemType}>()", // Array or Enumerable
+                        };
+                    }
+                    else
+                    {
+                        var src = $"container!.coll_{parameter.CollectionElementMemberName}";
+                        collectionArg = parameter.CollectionKind switch
+                        {
+                            CollectionKind.Array         => $"{src}.ToArray()",
+                            CollectionKind.List          => $"{src}.ToList()",
+                            CollectionKind.ImmutableArray => $"global::System.Collections.Immutable.ImmutableArray.CreateRange({src})",
+                            CollectionKind.ReadOnlySpan  => $"new global::System.ReadOnlySpan<{elemType}>({src}.ToArray())",
+                            _                            => src, // Enumerable — direct
+                        };
+                    }
+                    args.Add(collectionArg);
+                    continue;
+                }
+
+                if (parameter.IsNullable)
+                {
+                    args.Add("null");
+                    continue;
+                }
+
+                // Required non-DI parameter: sourced from the container's internal field.
+                // When nullContainer is true we use default! — callers accept that null-container
+                // mode cannot satisfy non-DI required dependencies.
+                args.Add(nullContainer ? "default!" : $"container!.{parameter.Name}");
+            }
+
+            return $"new {injection.TypeFullName}({string.Join(", ", args)})";
+        }
     }
 }
