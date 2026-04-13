@@ -1,5 +1,4 @@
 ﻿using FactoryGenerator.Attributes;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 
 namespace Inherited;

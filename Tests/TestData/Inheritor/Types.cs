@@ -1,5 +1,4 @@
-﻿using System.Runtime.InteropServices;
-using FactoryGenerator.Attributes;
+﻿using FactoryGenerator.Attributes;
 using Inherited;
 using Inheritor.Generated;
 

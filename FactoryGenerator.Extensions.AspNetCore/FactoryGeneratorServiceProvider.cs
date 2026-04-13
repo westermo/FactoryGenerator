@@ -1,5 +1,4 @@
 ﻿using System;
-using FactoryGenerator;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FactoryGenerator.Extensions.AspNetCore;

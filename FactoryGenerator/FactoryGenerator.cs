@@ -1084,6 +1084,7 @@ public partial class {className}
 
             var sb = new StringBuilder();
             sb.AppendLine($@"using System.CodeDom.Compiler;
+using System.Linq;
 namespace {compilation.Assembly.Name}.Generated;
 #nullable enable");
 

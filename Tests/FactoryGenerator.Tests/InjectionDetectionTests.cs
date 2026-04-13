@@ -1,4 +1,3 @@
-using System.ComponentModel;
 using Inherited;
 using Inheritor;
 using Inheritor.Generated;
