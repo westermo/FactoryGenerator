@@ -51,3 +51,16 @@ public static class Program
         return array;
     }
 }
+// ── Inheritor + Base array tests ─────────────────────────────────────────────
+// Additional ISplitArray implementations in the Inheritor project.  When a child
+// container is created from a parent, the merged IEnumerable<ISplitArray> should
+// contain items from both Inherited (Base) and Inheritor.
+
+[Inject]
+public class SplitInheritor1 : ISplitArray;
+
+[Inject]
+public class SplitInheritor2 : ISplitArray;
+
+[Inject]
+public class SplitInheritor3 : ISplitArray;

@@ -1,5 +1,4 @@
 ﻿using System;
-using FactoryGenerator;
 
 namespace FactoryGenerator.Extensions.AspNetCore;
 
