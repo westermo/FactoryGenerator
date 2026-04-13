@@ -7,9 +7,7 @@ using Microsoft.AspNetCore.TestHost;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Shouldly;
-using FactoryGenerator;
 using FactoryGenerator.Attributes;
-using FactoryGenerator.Extensions.AspNetCore;
 
 namespace FactoryGenerator.Extensions.AspNetCore.Tests;
 
