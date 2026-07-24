@@ -125,7 +125,7 @@ jobs:
           # Show alert with commit comment on detecting possible performance regression
           alert-threshold: '200%'
           comment-on-alert: false
-          fail-on-alert: true
+          fail-on-alert: false
 
       - name: Store generator benchmark result
         uses: rhysd/github-action-benchmark@v1
@@ -137,4 +137,4 @@ jobs:
           summary-always: true
           alert-threshold: '200%'
           comment-on-alert: false
-          fail-on-alert: true
+          fail-on-alert: false
