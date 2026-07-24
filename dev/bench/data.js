@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1784907188005,
+  "lastUpdate": 1784907190622,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -858,6 +858,62 @@ window.BENCHMARK_DATA = {
             "value": 91.08740299940109,
             "unit": "ns",
             "range": "± 0.8154536760901545"
+          }
+        ]
+      }
+    ],
+    "Generator Benchmark.Net Benchmark": [
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c12a7a53184f9f1917c022c0c8bc08dda310459",
+          "message": "Merge pull request #27 from westermo/static-extensions\n\nAdd Static Extensions (And fix a bug in cycle-detection)",
+          "timestamp": "2026-07-24T17:24:54+02:00",
+          "tree_id": "88b18be8a52d1da14f14656f5aaaa9414b1d0d6b",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/3c12a7a53184f9f1917c022c0c8bc08dda310459"
+        },
+        "date": 1784907189974,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph",
+            "value": 43866619.03703704,
+            "unit": "ns",
+            "range": "± 1807848.9640189316"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_NoiseHeavyProject",
+            "value": 35328662.02222222,
+            "unit": "ns",
+            "range": "± 1475515.565907085"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsDisabled",
+            "value": 32081190.555555556,
+            "unit": "ns",
+            "range": "± 807597.3217294218"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsEnabled",
+            "value": 39836770.92857143,
+            "unit": "ns",
+            "range": "± 719024.0515436226"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_MultiAssemblyOverrideGraph",
+            "value": 38037316.74358975,
+            "unit": "ns",
+            "range": "± 741508.604225611"
           }
         ]
       }
