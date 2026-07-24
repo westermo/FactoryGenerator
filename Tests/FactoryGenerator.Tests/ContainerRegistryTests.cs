@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using FactoryGenerator;
 using Inherited;
 using Inheritor.Generated;
@@ -10,17 +11,16 @@ public class ContainerRegistryTests
     [Test]
     public void ContainerEntryPointRegistersOnModuleLoad()
     {
-        // Force the Inheritor assembly to load, triggering its ModuleInitializer
-        _ = typeof(ContainerEntryPoint);
+        EnsureContainerEntryPointModuleInitialized();
 
-        // The Inheritor assembly's ModuleInitializer should have already registered
-        // its container factory in ContainerRegistry when the assembly was loaded.
         ContainerRegistry.RegisteredAssemblies.ShouldContain("Inheritor");
     }
 
     [Test]
     public void ContainerEntryPointCreateBuildsWorkingContainer()
     {
+        EnsureContainerEntryPointModuleInitialized();
+
         // Create a base container
         var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
@@ -34,6 +34,8 @@ public class ContainerRegistryTests
     [Test]
     public void BuildChainCreatesWorkingContainerPipeline()
     {
+        EnsureContainerEntryPointModuleInitialized();
+
         // Create a base container
         var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
@@ -48,7 +50,7 @@ public class ContainerRegistryTests
     [Test]
     public void BuildChainWithoutAssemblyListSkipsCurrentContainerAssembly()
     {
-        _ = typeof(ContainerEntryPoint);
+        EnsureContainerEntryPointModuleInitialized();
         var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
         var final = ContainerRegistry.BuildChain(baseContainer);
@@ -60,7 +62,7 @@ public class ContainerRegistryTests
     [Test]
     public void BuildChainWithExplicitAssemblyListSkipsCurrentContainerAssembly()
     {
-        _ = typeof(ContainerEntryPoint);
+        EnsureContainerEntryPointModuleInitialized();
         var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
         var final = ContainerRegistry.BuildChain(baseContainer, new[] { "Inheritor" });
@@ -73,5 +75,10 @@ public class ContainerRegistryTests
     public void ContainerEntryPointAssemblyNameIsCorrect()
     {
         ContainerEntryPoint.AssemblyName.ShouldBe("Inheritor");
+    }
+
+    private static void EnsureContainerEntryPointModuleInitialized()
+    {
+        RuntimeHelpers.RunModuleConstructor(typeof(ContainerEntryPoint).Module.ModuleHandle);
     }
 }
