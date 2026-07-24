@@ -4,6 +4,7 @@ using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
 using System.Threading;
+using System.Threading.Tasks;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.Diagnostics;
@@ -135,6 +136,7 @@ using System;
 using System.Linq;
 using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Threading.Tasks;
 using FactoryGenerator;
 using System.CodeDom.Compiler;
 namespace {compilation.Assembly.Name}.Generated;
@@ -144,7 +146,7 @@ namespace {compilation.Assembly.Name}.Generated;
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
 #nullable enable
 #pragma warning disable CS0169, CS0414
-public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IContainerRegistrationMetadata, IContainerCacheInvalidator
+public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IContainerRegistrationMetadata, IContainerCacheInvalidator, IAsyncDisposable, IContainerLocalCollectionResolver
 {{
     
 #pragma warning restore CS0169, CS0414
@@ -226,15 +228,22 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
     public IContainer? Inheritor {{ get; set; }}
     internal readonly object m_lock = new();
     private Dictionary<Type,Func<object>> m_lookup;
+    private Dictionary<Type,Func<object>> m_localCollectionLookup;
     private Dictionary<string,bool> m_booleans;
-    private List<WeakReference<IDisposable>>? resolvedInstances;
+    private readonly ResolvedInstanceTracker m_resolvedInstances = new();
 
-    internal List<WeakReference<IDisposable>> GetResolvedInstances()
+    internal void TrackResolvedInstance(object instance) => m_resolvedInstances.Track(instance);
+
+    public bool TryResolveLocalCollection(Type type, out object? resolved)
     {{
-        if (resolvedInstances is null)
-            lock (m_lock)
-                resolvedInstances ??= new List<WeakReference<IDisposable>>();
-        return resolvedInstances;
+        if (m_localCollectionLookup.TryGetValue(type, out var factory))
+        {{
+            resolved = factory();
+            return true;
+        }}
+
+        resolved = default;
+        return false;
     }}
 
     public T Resolve<T>()
@@ -258,17 +267,13 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
     public void Dispose()
     {{
         DetachFromBase();
-        if (resolvedInstances is not null)
-        {{
-            foreach (var weakReference in resolvedInstances)
-            {{
-                if(weakReference.TryGetTarget(out var disposable))
-                {{
-                    disposable.Dispose();
-                }}
-            }}
-            resolvedInstances.Clear();
-        }}
+        m_resolvedInstances.Dispose();
+    }}
+
+    public ValueTask DisposeAsync()
+    {{
+        DetachFromBase();
+        return m_resolvedInstances.DisposeAsync();
     }}
 
     public bool TryResolve(Type type, out object? resolved)
@@ -329,7 +334,7 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
                 declarations[injection.Name] = Declaration(injection, availableInterfaceFullNames, false);
                 scopedDeclarations[injection.Name] = Declaration(injection, availableInterfaceFullNames, true);
 
-                var missing = GetBestConstructorMissing(injection, availableInterfaceFullNames);
+                var missing = GetInjectionMissingParameters(injection, availableInterfaceFullNames);
                 foreach (var param in missing)
                 {
                     var key = param.TypeFullName + " " + param.Name;
@@ -360,6 +365,7 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
 
             var booleanReservedNames = constructorParameters.Select(parameter => parameter.Name)
                 .Concat(localizedParameters.Select(parameter => "coll_" + parameter.CollectionElementMemberName!))
+                .Concat(interfaceMemberNames.Values.Select(name => "local_coll_" + name))
                 .Concat(localizedParameters.Select(parameter => "m_coll_" + parameter.CollectionElementMemberName!))
                 .Concat(interfaceMemberNames.Values)
                 .Concat(ordered.Select(injection => injection.Name.Replace("()", string.Empty)))
@@ -373,12 +379,15 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
                     "Dispose",
                     "Resolve",
                     "TryResolve",
+                    "TryResolveLocalCollection",
                     "IsRegistered",
                     "GetBoolean",
                     "GetBooleans",
                     "BeginLifetimeScope",
-                    "GetResolvedInstances",
-                    "resolvedInstances",
+                    "DisposeAsync",
+                    "TrackResolvedInstance",
+                    "m_resolvedInstances",
+                    "m_localCollectionLookup",
                     "m_lock",
                     "m_lookup",
                     "m_booleans",
@@ -410,20 +419,11 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
                 }
                 else
                 {
-                    var keys = possibilities.Select(i => i.BooleanInjection?.Key).OfType<string>().Distinct().Reverse().ToArray();
-                    var fallback = possibilities.LastOrDefault(p => p.BooleanInjection == null);
-                    var last = keys.Last();
-                    var ternary = new StringBuilder();
-                    foreach (var key in keys)
-                    {
-                        var keyIdentifier = booleanIdentifiers[key];
-                        var trueValue = possibilities.LastOrDefault(p =>
-                            p.BooleanInjection?.Value == true && p.BooleanInjection?.Key == key);
-                        trueValue ??= fallback;
-                        ternary.Append(key == last
-                            ? $"{keyIdentifier} ? {trueValue?.Name ?? "null!"} : {fallback?.Name ?? "null!"}"
-                            : $"{keyIdentifier} ? {trueValue?.Name ?? "null!"} : ");
-                    }
+                    var ternary = BuildBooleanSelectionExpression(
+                        ifaceFull,
+                        possibilities,
+                        booleanIdentifiers,
+                        possibility => possibility.Name);
 
                     if (!declarations.ContainsKey(ifaceMethodName))
                     {
@@ -486,12 +486,15 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
                 .Select(key => (TypeName: $"System.Collections.Generic.IEnumerable<{key}>", Expression: "coll_" + interfaceMemberNames[key]))
                 .Where(pair => !localizedTypes.Contains(pair.TypeName))
                 .ToList();
+            var localCollectionPairs = interfaceInjectors.Keys
+                .Select(key => (TypeName: $"System.Collections.Generic.IEnumerable<{key}>", Expression: "local_coll_" + interfaceMemberNames[key]))
+                .ToList();
             var constructorPairs = DistinctByTypeName(externalParameters.Select(p => (TypeName: p.TypeFullName, Expression: p.Name)).ToList(), pair => pair.TypeName);
 
             var dictSize = interfacePairs.Count + localizedPairs.Count + enumerablePairs.Count + constructorPairs.Count;
             yield return Constructor(usingStatements, constructorFields,
                                      constructor, constructorAssignments,
-                                     dictSize, interfacePairs, localizedPairs, enumerablePairs, constructorPairs,
+                                     dictSize, interfacePairs, localizedPairs, enumerablePairs, constructorPairs, localCollectionPairs,
                                      true, ClassName, lifetimeInvocationValues: lifetimeParameterValues,
                                      resolvingConstructorAssignments: resolvedConstructorAssignments, booleans: booleanParameters);
             yield return Declarations(usingStatements, declarations, ClassName);
@@ -500,7 +503,7 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
 [GeneratedCode(""{ToolName}"", ""{Version}"")]
 #nullable enable
 #pragma warning disable CS0169, CS0414
-public sealed partial class LifetimeScope : IContainer, IContainerScopeFactory, IContainerRegistrationMetadata, IContainerCacheInvalidator
+public sealed partial class LifetimeScope : IContainer, IContainerScopeFactory, IContainerRegistrationMetadata, IContainerCacheInvalidator, IAsyncDisposable, IContainerLocalCollectionResolver
 {{
 #pragma warning restore CS0169, CS0414
     private IContainer GetRoot()
@@ -588,22 +591,28 @@ public sealed partial class LifetimeScope : IContainer, IContainerScopeFactory, 
     public ILifetimeScope BeginLifetimeScope(IContainer? baseContainer)
     {{
         var scope = m_fallback.BeginLifetimeScope(baseContainer);
-        GetResolvedInstances().Add(new WeakReference<IDisposable>(scope));
+        TrackResolvedInstance(scope);
         return scope;
     }}
     internal readonly object m_lock = new();
     private {ClassName} m_fallback;
-    private IContainer? m_ownedBase;
     private Dictionary<Type,Func<object>> m_lookup;
+    private Dictionary<Type,Func<object>> m_localCollectionLookup;
     private Dictionary<string,bool> m_booleans;
-    private List<WeakReference<IDisposable>>? resolvedInstances;
+    private readonly ResolvedInstanceTracker m_resolvedInstances = new();
 
-    internal List<WeakReference<IDisposable>> GetResolvedInstances()
+    internal void TrackResolvedInstance(object instance) => m_resolvedInstances.Track(instance);
+
+    public bool TryResolveLocalCollection(Type type, out object? resolved)
     {{
-        if (resolvedInstances is null)
-            lock (m_lock)
-                resolvedInstances ??= new List<WeakReference<IDisposable>>();
-        return resolvedInstances;
+        if (m_localCollectionLookup.TryGetValue(type, out var factory))
+        {{
+            resolved = factory();
+            return true;
+        }}
+
+        resolved = default;
+        return false;
     }}
 
     public T Resolve<T>()
@@ -627,20 +636,13 @@ public sealed partial class LifetimeScope : IContainer, IContainerScopeFactory, 
     public void Dispose()
     {{
         DetachFromBase();
-        if (resolvedInstances is not null)
-        {{
-            foreach (var weakReference in resolvedInstances)
-            {{
-                if(weakReference.TryGetTarget(out var disposable))
-                {{
-                    disposable.Dispose();
-                }}
-            }}
-            resolvedInstances.Clear();
-        }}
-        var ownedBase = m_ownedBase;
-        m_ownedBase = null;
-        ownedBase?.Dispose();
+        m_resolvedInstances.Dispose();
+    }}
+
+    public ValueTask DisposeAsync()
+    {{
+        DetachFromBase();
+        return m_resolvedInstances.DisposeAsync();
     }}
 
     public bool TryResolve(Type type, out object? resolved)
@@ -689,7 +691,7 @@ public sealed partial class LifetimeScope : IContainer, IContainerScopeFactory, 
 ";
             yield return Constructor(usingStatements, constructorFields,
                                      lifetimeConstructor, constructorAssignments,
-                                     dictSize, interfacePairs, localizedPairs, enumerablePairs, constructorPairs,
+                                     dictSize, interfacePairs, localizedPairs, enumerablePairs, constructorPairs, localCollectionPairs,
                                      false, LifetimeName,
                                      resolvingConstructorAssignments: resolvedConstructorAssignments, addMergingConstructor: false, booleans: booleanParameters);
             yield return Declarations(usingStatements, scopedDeclarations, LifetimeName);
@@ -853,8 +855,19 @@ namespace {compilation.Assembly.Name}.Generated
 
         private static IEnumerable<string> GetCycleDependencies(InjectionData injection, ImmutableArray<string> availableInterfaceFullNames)
         {
-            if (injection.Lambda is not null)
+            if (injection.Lambda is LambdaData lambda)
+            {
+                if (availableInterfaceFullNames.Contains(lambda.ContainingTypeFullName))
+                    yield return lambda.ContainingTypeFullName;
+
+                if (!lambda.IsMethod)
+                    yield break;
+
+                foreach (var dependency in GetParameterDependencies(lambda.MethodParameters, availableInterfaceFullNames))
+                    yield return dependency;
+
                 yield break;
+            }
 
             HashSet<ParameterData>? missing = null;
             HashSet<ParameterData>? nullableDefaults = null;
@@ -862,7 +875,15 @@ namespace {compilation.Assembly.Name}.Generated
             if (ctor is null)
                 yield break;
 
-            foreach (var parameter in ctor.Parameters)
+            foreach (var dependency in GetParameterDependencies(ctor.Parameters, availableInterfaceFullNames))
+                yield return dependency;
+        }
+
+        private static IEnumerable<string> GetParameterDependencies(
+            ImmutableArray<ParameterData> parameters,
+            ImmutableArray<string> availableInterfaceFullNames)
+        {
+            foreach (var parameter in parameters)
             {
                 if (parameter.IsCollection)
                     continue;
@@ -956,6 +977,47 @@ namespace {compilation.Assembly.Name}.Generated
             }
 
             return identifiers;
+        }
+
+        private static string BuildBooleanSelectionExpression(
+            string typeFullName,
+            IReadOnlyList<InjectionData> possibilities,
+            IReadOnlyDictionary<string, string> booleanIdentifiers,
+            Func<InjectionData, string> implementationExpression)
+        {
+            if (possibilities.All(possibility => possibility.BooleanInjection is null))
+                return implementationExpression(possibilities.Last());
+
+            var keys = possibilities.Select(possibility => possibility.BooleanInjection?.Key)
+                .OfType<string>()
+                .Distinct()
+                .Reverse()
+                .ToArray();
+
+            var fallback = possibilities.LastOrDefault(possibility => possibility.BooleanInjection is null);
+            var fallbackExpression = fallback is not null
+                ? implementationExpression(fallback)
+                : BuildMissingImplementationExpression(typeFullName);
+
+            if (keys.Length == 0)
+                return fallbackExpression;
+
+            var last = keys.Last();
+            var selection = new StringBuilder();
+            foreach (var key in keys)
+            {
+                var selected = possibilities.LastOrDefault(possibility =>
+                    possibility.BooleanInjection?.Value == true && possibility.BooleanInjection?.Key == key) ?? fallback;
+                var selectedExpression = selected is not null
+                    ? implementationExpression(selected)
+                    : BuildMissingImplementationExpression(typeFullName);
+
+                selection.Append(key == last
+                    ? $"{booleanIdentifiers[key]} ? {selectedExpression} : {fallbackExpression}"
+                    : $"{booleanIdentifiers[key]} ? {selectedExpression} : ");
+            }
+
+            return selection.ToString();
         }
 
         private static string GetBooleanParameterIdentifier(string booleanKey)
@@ -1054,6 +1116,7 @@ namespace {compilation.Assembly.Name}.Generated
         private static string Constructor(string usingStatements, string constructorFields, string constructor, string constructorAssignments, int dictSize,
                                           IEnumerable<(string TypeName, string MemberName)> interfaceTypePairs, IEnumerable<(string TypeName, string Expression)> localizedParamPairs,
                                           IEnumerable<(string TypeName, string Expression)> enumerablePairs, IEnumerable<(string TypeName, string Expression)> constructorParamPairs,
+                                          IEnumerable<(string TypeName, string Expression)> localCollectionPairs,
                                           bool addLifetimeScopeFunction, string className, string? lifetimeInvocationValues = null,
                                           string? fromConstructor = null, string? resolvingConstructorAssignments = null, bool addMergingConstructor = true,
                                           IReadOnlyList<(string Key, string Identifier)> booleans = null!)
@@ -1068,7 +1131,7 @@ public ILifetimeScope BeginLifetimeScope()
 public ILifetimeScope BeginLifetimeScope(IContainer? baseContainer)
 {{
     var scope = new {LifetimeName}({lifetimeInvocationValues});
-    GetResolvedInstances().Add(new WeakReference<IDisposable>(scope));
+    TrackResolvedInstance(scope);
     return scope;
 }}" : string.Empty;
 
@@ -1087,6 +1150,9 @@ public {className}(IContainer Base{fromConstructor})
 {MakeDictionaryFromParams(enumerablePairs)}
 {MakeDictionaryFromParams(constructorParamPairs)}
     }};
+    m_localCollectionLookup = new({localCollectionPairs.Count()}) {{
+{MakeDictionaryFromParams(localCollectionPairs)}
+    }};
     m_booleans = new();
     foreach(var (key, value) in Base.GetBooleans())
     {{
@@ -1097,9 +1163,11 @@ public {className}(IContainer Base{fromConstructor})
 
             var extraConstruction = addLifetimeScopeFunction ? string.Empty : @"m_fallback = fallback;
         this.Base = baseContainer;
-        m_ownedBase = baseContainer;
         if (baseContainer is not null)
-            AttachToBase(baseContainer);";
+        {
+            AttachToBase(baseContainer);
+            TrackResolvedInstance(baseContainer);
+        }";
             return $@"{usingStatements}
 public partial class {className}
 {{
@@ -1114,6 +1182,9 @@ public partial class {className}
 {MakeDictionaryFromParams(localizedParamPairs)}
 {MakeDictionaryFromParams(enumerablePairs)}
 {MakeDictionaryFromParams(constructorParamPairs)}
+        }};
+        m_localCollectionLookup = new({localCollectionPairs.Count()})  {{
+{MakeDictionaryFromParams(localCollectionPairs)}
         }};
         
     m_booleans = new({booleans.Count}) {{
@@ -1155,39 +1226,73 @@ public partial class {className}
                                       string elementTypeFullName, Dictionary<string, List<InjectionData>> interfaceInjectors,
                                       IReadOnlyDictionary<string, string> booleanIdentifiers)
         {
-            var factoryName = $"new {elementTypeFullName}[0]";
-            var factory = string.Empty;
-            if (interfaceInjectors.TryGetValue(elementTypeFullName, out var injections))
-            {
-                factoryName = $"Create{name}()".Replace("_", "");
-                var nonBooleanInjections = injections.Where(i => i.BooleanInjection == null).ToList();
-                var booleanInjections = injections.Where(b => b.BooleanInjection != null).ToList();
-                factory = @$"
+            var injections = interfaceInjectors.TryGetValue(elementTypeFullName, out var foundInjections)
+                ? foundInjections
+                : new List<InjectionData>();
+            var localFactoryName = $"CreateLocal{name}()".Replace("_", "");
+            var factoryName = $"Create{name}()".Replace("_", "");
+            var nonBooleanInjections = injections.Where(i => i.BooleanInjection == null).ToList();
+            var booleanInjections = injections.Where(b => b.BooleanInjection != null).ToList();
+            var factory = @$"
+    IEnumerable<{elementTypeFullName}> {localFactoryName}
+    {{
+        var source = new List<{elementTypeFullName}>({nonBooleanInjections.Count}) {{ 
+            {string.Join(",\n\t\t\t", nonBooleanInjections.Select(i => i.Name))} 
+        }};
+        {string.Join("\n\t\t\t", booleanInjections.Select(i => $"if({booleanIdentifiers[i.BooleanInjection!.Key]}) source.Add({i.Name});"))}
+        return source;
+    }}
     private bool Reentrant_{name};
     IEnumerable<{elementTypeFullName}> {factoryName}
     {{
         if(Reentrant_{name}) return Array.Empty<{elementTypeFullName}>();
         Reentrant_{name} = true;
-        var source = new List<{elementTypeFullName}>({nonBooleanInjections.Count}) {{ 
-            {string.Join(",\n\t\t\t", nonBooleanInjections.Select(i => i.Name))} 
-        }};
-        {string.Join("\n\t\t\t", booleanInjections.Select(i => $"if({booleanIdentifiers[i.BooleanInjection!.Key]}) source.Add({i.Name});"))}
+        var source = new List<{elementTypeFullName}>({localFactoryName});
         var b = Base;
+        var frameworkCollectionSourceSeen = false;
         while(b is not null)
         {{
-            if(b.TryResolve<IEnumerable<{elementTypeFullName}>>(out var additional)) source.AddRange(additional!);
+            if(!(frameworkCollectionSourceSeen && b is IServiceProviderBackedContainer))
+            {{
+                if (b is IContainerLocalCollectionResolver localResolver)
+                {{
+                    if(localResolver.TryResolveLocalCollection(typeof(IEnumerable<{elementTypeFullName}>), out var localAdditional))
+                        source.AddRange((IEnumerable<{elementTypeFullName}>)localAdditional!);
+                }}
+                else if(b.TryResolve<IEnumerable<{elementTypeFullName}>>(out var additional))
+                {{
+                    source.AddRange(additional!);
+                }}
+
+                if (b is IServiceProviderBackedContainer)
+                    frameworkCollectionSourceSeen = true;
+            }}
             b = b.Base;
         }}
+        var inheritorFrameworkCollectionSourceSeen = false;
         b = Inheritor;
         while(b is not null)
         {{
-            if(b.TryResolve<IEnumerable<{elementTypeFullName}>>(out var additional)) source.AddRange(additional!);
+            if(!(inheritorFrameworkCollectionSourceSeen && b is IServiceProviderBackedContainer))
+            {{
+                if (b is IContainerLocalCollectionResolver localResolver)
+                {{
+                    if(localResolver.TryResolveLocalCollection(typeof(IEnumerable<{elementTypeFullName}>), out var localAdditional))
+                        source.AddRange((IEnumerable<{elementTypeFullName}>)localAdditional!);
+                }}
+                else if(b.TryResolve<IEnumerable<{elementTypeFullName}>>(out var additional))
+                {{
+                    source.AddRange(additional!);
+                }}
+
+                if (b is IServiceProviderBackedContainer)
+                    inheritorFrameworkCollectionSourceSeen = true;
+            }}
             b = b.Inheritor;
         }}
         Reentrant_{name} = false;
         return source;
     }}";
-            }
             declarations[name] = $@"
     internal IEnumerable<{elementTypeFullName}> {name}
     {{
@@ -1206,6 +1311,7 @@ public partial class {className}
             }}
         }}
     }} 
+    internal IEnumerable<{elementTypeFullName}> local_{name} => {localFactoryName};
     internal IEnumerable<{elementTypeFullName}>? m_{name};" + factory;
         }
 
@@ -1235,9 +1341,9 @@ public partial class {className}
                 return $"internal {injection.TypeFullName} {name} => m_fallback.{name};";
 
             if (injection.Singleton || injection.Scoped)
-                return SymbolUtility.SingletonFactory(injection.TypeFullName, name, lazyName, creation, injection.Disposable);
+                return SymbolUtility.SingletonFactory(injection.TypeFullName, name, lazyName, creation, injection.Disposable || injection.AsyncDisposable);
 
-            if (injection.Disposable)
+            if (injection.Disposable || injection.AsyncDisposable)
                 return SymbolUtility.DisposableFactory(injection.TypeFullName, name, creation);
 
             return $"internal {injection.TypeFullName} {name} => {creation};";
@@ -1251,22 +1357,13 @@ public partial class {className}
                     throw new Exception(
                         $"Could not find any [Inject]ed implementations of {lambda.ContainingTypeFullName} to use as the source for the injection of {lambda.ContainingTypeFullName}.{lambda.MemberName}. Please provide at least one injection of the type {lambda.ContainingTypeFullName}.");
 
-                // Compute nullable defaults for lambda method parameters
-                HashSet<ParameterData>? lambdaNullableDefaults = null;
-                if (lambda.IsMethod && lambda.MethodParameters.Length > 0)
-                {
-                    foreach (var p in lambda.MethodParameters)
-                    {
-                        if (!p.IsNullable) continue;
-                        var baseType = p.TypeFullName.TrimEnd('?');
-                        if (availableInterfaceFullNames.Contains(baseType)) continue;
-                        lambdaNullableDefaults ??= new HashSet<ParameterData>();
-                        lambdaNullableDefaults.Add(p);
-                    }
-                }
-
                 if (lambda.IsMethod)
-                    return $"{lambda.ContainingTypeMemberName}.{lambda.MemberName}{MakeMethodCall(lambda.MethodParameters, null, lambdaNullableDefaults)}";
+                {
+                    HashSet<ParameterData>? lambdaMissing = null;
+                    HashSet<ParameterData>? lambdaNullableDefaults = null;
+                    AnalyzeParameters(lambda.MethodParameters, availableInterfaceFullNames, ref lambdaMissing, ref lambdaNullableDefaults);
+                    return $"{lambda.ContainingTypeMemberName}.{lambda.MemberName}{MakeMethodCall(lambda.MethodParameters, lambdaMissing, lambdaNullableDefaults)}";
+                }
                 else
                     return $"{lambda.ContainingTypeMemberName}.{lambda.MemberName}";
             }
@@ -1289,96 +1386,137 @@ public partial class {className}
             ConstructorData? chosen = null;
             foreach (var ctor in injection.Constructors)
             {
-                var valid = true;
-                var localMissing = new HashSet<ParameterData>();
-                var localNullableDefaults = new HashSet<ParameterData>();
-                foreach (var parameter in ctor.Parameters)
-                {
-                    // For nullable params, check availability of the underlying non-nullable type
-                    var typeLookup = parameter.IsNullable
-                        ? parameter.TypeFullName.TrimEnd('?')
-                        : parameter.TypeFullName;
-                    if (availableInterfaceFullNames.Contains(typeLookup)) continue;
-                    if (parameter.HasExplicitDefault) continue;
-                    if (parameter.IsParams) continue;
-                    // Collection params (IEnumerable<T>, T[], List<T>, etc.) are always satisfiable
-                    // via MakeArray – add to missing for factory generation but keep constructor valid
-                    if (parameter.IsCollection)
-                    {
-                        localMissing.Add(parameter);
-                        continue;
-                    }
-                    // Nullable reference/value params that aren't registered default to null
-                    if (parameter.IsNullable)
-                    {
-                        localNullableDefaults.Add(parameter);
-                        continue;
-                    }
-                    valid = false;
-                    localMissing.Add(parameter);
-                }
+                HashSet<ParameterData>? localMissing = null;
+                HashSet<ParameterData>? localNullableDefaults = null;
+                AnalyzeParameters(ctor.Parameters, availableInterfaceFullNames, ref localMissing, ref localNullableDefaults, out var valid);
 
                 if (valid)
                 {
                     chosen = ctor;
-                    missing = localMissing.Count > 0 ? localMissing : null;
-                    nullableDefaults = localNullableDefaults.Count > 0 ? localNullableDefaults : null;
+                    missing = localMissing;
+                    nullableDefaults = localNullableDefaults;
                     break;
                 }
 
-                if ((missing?.Count ?? int.MaxValue) <= localMissing.Count) continue;
+                if ((missing?.Count ?? int.MaxValue) <= (localMissing?.Count ?? 0)) continue;
                 chosen = ctor;
                 missing = localMissing;
-                nullableDefaults = localNullableDefaults.Count > 0 ? localNullableDefaults : null;
+                nullableDefaults = localNullableDefaults;
             }
             return chosen;
         }
 
-        private static IEnumerable<ParameterData> GetBestConstructorMissing(InjectionData injection,
+        private static IEnumerable<ParameterData> GetInjectionMissingParameters(InjectionData injection,
             ImmutableArray<string> availableInterfaceFullNames)
         {
+            if (injection.Lambda is LambdaData lambda)
+            {
+                if (!lambda.IsMethod)
+                    return Enumerable.Empty<ParameterData>();
+
+                HashSet<ParameterData>? lambdaMissing = null;
+                HashSet<ParameterData>? lambdaNullableDefaults = null;
+                AnalyzeParameters(lambda.MethodParameters, availableInterfaceFullNames, ref lambdaMissing, ref lambdaNullableDefaults);
+                return lambdaMissing ?? Enumerable.Empty<ParameterData>();
+            }
+
             HashSet<ParameterData>? missing = null;
             HashSet<ParameterData>? nullableDefaults = null;
             GetBestConstructor(injection, availableInterfaceFullNames, ref missing, ref nullableDefaults);
             return missing ?? Enumerable.Empty<ParameterData>();
         }
 
+        private static void AnalyzeParameters(
+            ImmutableArray<ParameterData> parameters,
+            ImmutableArray<string> availableInterfaceFullNames,
+            ref HashSet<ParameterData>? missing,
+            ref HashSet<ParameterData>? nullableDefaults)
+        {
+            AnalyzeParameters(parameters, availableInterfaceFullNames, ref missing, ref nullableDefaults, out _);
+        }
+
+        private static void AnalyzeParameters(
+            ImmutableArray<ParameterData> parameters,
+            ImmutableArray<string> availableInterfaceFullNames,
+            ref HashSet<ParameterData>? missing,
+            ref HashSet<ParameterData>? nullableDefaults,
+            out bool valid)
+        {
+            var localMissing = new HashSet<ParameterData>();
+            var localNullableDefaults = new HashSet<ParameterData>();
+            valid = true;
+
+            foreach (var parameter in parameters)
+            {
+                var typeLookup = parameter.IsNullable
+                    ? parameter.TypeFullName.TrimEnd('?')
+                    : parameter.TypeFullName;
+
+                if (parameter.IsCollection)
+                {
+                    localMissing.Add(parameter);
+                    continue;
+                }
+
+                if (availableInterfaceFullNames.Contains(typeLookup))
+                    continue;
+
+                if (parameter.HasExplicitDefault || parameter.IsParams)
+                    continue;
+
+                if (parameter.IsNullable)
+                {
+                    localNullableDefaults.Add(parameter);
+                    continue;
+                }
+
+                valid = false;
+                localMissing.Add(parameter);
+            }
+
+            missing = localMissing.Count > 0 ? localMissing : null;
+            nullableDefaults = localNullableDefaults.Count > 0 ? localNullableDefaults : null;
+        }
+
         private static string MakeConstructorCall(ConstructorData ctor, HashSet<ParameterData>? missing, HashSet<ParameterData>? nullableDefaults)
         {
-            var args = new List<string>();
-            foreach (var parameter in ctor.Parameters)
-            {
-                if (nullableDefaults?.Contains(parameter) == true)
-                {
-                    args.Add("null");
-                    continue;
-                }
-                if (missing?.Contains(parameter) == true)
-                {
-                    args.Add(CollectionConstructorArg(parameter));
-                    continue;
-                }
-                args.Add(parameter.TypeMemberName + "()");
-            }
-            return $"({string.Join(", ", args)})";
+            return MakeInvocationCall(ctor.Parameters, missing, nullableDefaults);
         }
 
         private static string MakeMethodCall(ImmutableArray<ParameterData> parameters, HashSet<ParameterData>? missing, HashSet<ParameterData>? nullableDefaults = null)
         {
+            return MakeInvocationCall(parameters, missing, nullableDefaults);
+        }
+
+        private static string MakeInvocationCall(
+            ImmutableArray<ParameterData> parameters,
+            HashSet<ParameterData>? missing,
+            HashSet<ParameterData>? nullableDefaults)
+        {
             var args = new List<string>();
+            var useNamedArguments = false;
             foreach (var parameter in parameters)
             {
                 if (nullableDefaults?.Contains(parameter) == true)
                 {
-                    args.Add("null");
+                    args.Add(useNamedArguments ? $"{parameter.Name}: null" : "null");
                     continue;
                 }
                 if (missing?.Contains(parameter) == true)
                 {
-                    args.Add(CollectionConstructorArg(parameter));
+                    var argument = CollectionConstructorArg(parameter);
+                    args.Add(useNamedArguments ? $"{parameter.Name}: {argument}" : argument);
                     continue;
                 }
-                args.Add(parameter.TypeMemberName + "()");
+
+                if (parameter.HasExplicitDefault || parameter.IsParams)
+                {
+                    useNamedArguments = true;
+                    continue;
+                }
+
+                var resolvedArgument = parameter.TypeMemberName + "()";
+                args.Add(useNamedArguments ? $"{parameter.Name}: {resolvedArgument}" : resolvedArgument);
             }
             return $"({string.Join(", ", args)})";
         }
@@ -1842,10 +1980,11 @@ public static class {spec.ExtensionClassName}
             var helperName = GetStaticInjectionHelperName(injection);
             var parameterList = BuildStaticMethodParameterList(spec, booleanIdentifiers, externalIdentifiers, includeContainer: true, includeState: true);
             var createInvocation = BuildStaticCreateInjectionInvocation(spec, injection, booleanIdentifiers, externalIdentifiers);
+            var tracksResolvedInstance = injection.Disposable || injection.AsyncDisposable;
 
             if (injection.Singleton || injection.Scoped)
             {
-                if (injection.Disposable)
+                if (tracksResolvedInstance)
                 {
                     return $@"    private static {injection.TypeFullName} Resolve_{helperName}({parameterList})
     {{
@@ -1862,7 +2001,7 @@ public static class {spec.ExtensionClassName}
                     return cached;
 
                 var value = {createInvocation};
-                container.GetResolvedInstances().Add(new global::System.WeakReference<global::System.IDisposable>(value));
+                container.TrackResolvedInstance(value);
                 container.{injection.LazyFieldName} = value;
                 return value;
             }}
@@ -1894,14 +2033,14 @@ public static class {spec.ExtensionClassName}
     }}";
             }
 
-            if (injection.Disposable)
+            if (tracksResolvedInstance)
             {
                 return $@"    private static {injection.TypeFullName} Resolve_{helperName}({parameterList})
     {{
         if (container is not null)
         {{
             var value = {createInvocation};
-            container.GetResolvedInstances().Add(new global::System.WeakReference<global::System.IDisposable>(value));
+            container.TrackResolvedInstance(value);
             return value;
         }}
 
@@ -1946,42 +2085,50 @@ public static class {spec.ExtensionClassName}
             if (injection.Lambda is LambdaData lambda)
             {
                 if (!specs.TryGetValue(lambda.ContainingTypeFullName, out var containingSpec))
-                    return BuildStaticMissingImplementationExpression(lambda.ContainingTypeFullName);
+                    return BuildMissingImplementationExpression(lambda.ContainingTypeFullName);
 
                 var containingInvocation = BuildStaticResolveInvocation(containingSpec, "ResolveCore", booleanIdentifiers, externalIdentifiers);
                 if (!lambda.IsMethod)
                     return $"{containingInvocation}.{lambda.MemberName}";
 
-                var lambdaArguments = BuildStaticArgumentExpressions(lambda.MethodParameters, specs, booleanIdentifiers, externalIdentifiers);
-                return $"{containingInvocation}.{lambda.MemberName}({string.Join(", ", lambdaArguments)})";
+                var lambdaArguments = BuildStaticArgumentList(lambda.MethodParameters, specs, booleanIdentifiers, externalIdentifiers);
+                return $"{containingInvocation}.{lambda.MemberName}({lambdaArguments})";
             }
 
             HashSet<ParameterData>? missing = null;
             HashSet<ParameterData>? nullableDefaults = null;
             var constructor = GetBestConstructor(injection, availableInterfaces, ref missing, ref nullableDefaults);
             if (constructor is null)
-                return BuildStaticMissingImplementationExpression(injection.TypeFullName);
+                return BuildMissingImplementationExpression(injection.TypeFullName);
 
-            var constructorArguments = BuildStaticArgumentExpressions(constructor.Parameters, specs, booleanIdentifiers, externalIdentifiers);
-            return $"new {injection.TypeFullName}({string.Join(", ", constructorArguments)})";
+            var constructorArguments = BuildStaticArgumentList(constructor.Parameters, specs, booleanIdentifiers, externalIdentifiers);
+            return $"new {injection.TypeFullName}({constructorArguments})";
         }
 
-        private static List<string> BuildStaticArgumentExpressions(
+        private static string BuildStaticArgumentList(
             ImmutableArray<ParameterData> parameters,
             IReadOnlyDictionary<string, StaticExtensionSpec> specs,
             IReadOnlyDictionary<string, string> booleanIdentifiers,
             IReadOnlyDictionary<string, string> externalIdentifiers)
         {
             var arguments = new List<string>();
+            var useNamedArguments = false;
 
             foreach (var parameter in parameters)
             {
                 var argumentExpression = BuildStaticArgumentExpression(parameter, specs, booleanIdentifiers, externalIdentifiers);
-                if (argumentExpression is not null)
-                    arguments.Add(argumentExpression);
+                if (argumentExpression is null)
+                {
+                    useNamedArguments = true;
+                    continue;
+                }
+
+                arguments.Add(useNamedArguments
+                    ? $"{parameter.Name}: {argumentExpression}"
+                    : argumentExpression);
             }
 
-            return arguments;
+            return string.Join(", ", arguments);
         }
 
         private static string? BuildStaticArgumentExpression(
@@ -1994,7 +2141,11 @@ public static class {spec.ExtensionClassName}
             {
                 if (!specs.TryGetValue(parameter.CollectionElementFullName, out var collectionSpec))
                 {
-                    return BuildStaticCollectionConversion(parameter, $"global::System.Array.Empty<{parameter.CollectionElementFullName}>()");
+                    var resolvedCollectionName = "resolvedCollection_" + parameter.Name;
+                    var fallbackCollection = $@"container != null && container.TryResolve<IEnumerable<{parameter.CollectionElementFullName}>>(out var {resolvedCollectionName})
+                    ? {resolvedCollectionName}!
+                    : global::System.Array.Empty<{parameter.CollectionElementFullName}>()";
+                    return BuildStaticCollectionConversion(parameter, fallbackCollection);
                 }
 
                 return BuildStaticCollectionConversion(
@@ -2018,7 +2169,7 @@ public static class {spec.ExtensionClassName}
             if (externalIdentifiers.TryGetValue(parameter.TypeFullName, out var identifier))
                 return identifier;
 
-            return BuildStaticMissingImplementationExpression(parameter.TypeFullName);
+            return BuildMissingImplementationExpression(parameter.TypeFullName);
         }
 
         private static string BuildStaticCollectionConversion(ParameterData parameter, string sourceExpression)
@@ -2058,24 +2209,11 @@ public static class {spec.ExtensionClassName}
             IReadOnlyDictionary<string, string> booleanIdentifiers,
             IReadOnlyDictionary<string, string> externalIdentifiers)
         {
-            if (spec.Possibilities.All(possibility => possibility.BooleanInjection is null))
-                return BuildStaticResolveInjectionInvocation(spec, spec.Possibilities.Last(), booleanIdentifiers, externalIdentifiers);
-
-            var keys = spec.Possibilities.Select(possibility => possibility.BooleanInjection?.Key).OfType<string>().Distinct().Reverse().ToArray();
-            var fallback = spec.Possibilities.LastOrDefault(possibility => possibility.BooleanInjection is null);
-            var expression = fallback is not null
-                ? BuildStaticResolveInjectionInvocation(spec, fallback, booleanIdentifiers, externalIdentifiers)
-                : BuildStaticMissingImplementationExpression(spec.TypeFullName);
-
-            foreach (var key in keys)
-            {
-                var selected = spec.Possibilities.LastOrDefault(possibility =>
-                    possibility.BooleanInjection?.Value == true && possibility.BooleanInjection?.Key == key) ?? fallback;
-
-                expression = $"{booleanIdentifiers[key]} ? {(selected is not null ? BuildStaticResolveInjectionInvocation(spec, selected, booleanIdentifiers, externalIdentifiers) : BuildStaticMissingImplementationExpression(spec.TypeFullName))} : {expression}";
-            }
-
-            return expression;
+            return BuildBooleanSelectionExpression(
+                spec.TypeFullName,
+                spec.Possibilities,
+                booleanIdentifiers,
+                possibility => BuildStaticResolveInjectionInvocation(spec, possibility, booleanIdentifiers, externalIdentifiers));
         }
 
         private static string BuildStaticResolveInjectionInvocation(
@@ -2154,7 +2292,7 @@ public static class {spec.ExtensionClassName}
             return $"{containerExpression}, {stateExpression}, {runtimeValues}";
         }
 
-        private static string BuildStaticMissingImplementationExpression(string typeFullName)
+        private static string BuildMissingImplementationExpression(string typeFullName)
         {
             return $"throw new global::System.InvalidOperationException(\"Cannot resolve {typeFullName} without a matching implementation\")";
         }

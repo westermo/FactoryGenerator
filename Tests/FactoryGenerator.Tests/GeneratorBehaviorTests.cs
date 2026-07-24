@@ -1,6 +1,7 @@
 using System;
 using System.IO;
 using System.Linq;
+using FactoryGenerator;
 using FactoryGenerator.Attributes;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
@@ -92,6 +93,312 @@ public class FallbackService : IService
         generatedSource.ShouldContain("\"feature-flag\"");
         generatedSource.ShouldNotContain("bool feature-flag");
         generatedSource.ShouldContain("Resolve(DependencyInjectionContainer? container, bool boolean_feature_flag)");
+    }
+
+    [Test]
+    public void BooleanOnlyImplementationsThrowInsteadOfResolvingNull()
+    {
+        var assemblyName = "BooleanOnly" + Guid.NewGuid().ToString("N");
+        var source = $$"""
+using FactoryGenerator.Attributes;
+
+namespace {{assemblyName}}
+{
+public interface IService
+{
+}
+
+[Inject, Boolean("enabled")]
+public class EnabledService : IService
+{
+}
+}
+""";
+
+        var compilation = CreateCompilation(assemblyName, source);
+        var (runResult, outputCompilation) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray()
+            .ShouldBeEmpty();
+
+        var expectedMessage = $"Cannot resolve {assemblyName}.IService without a matching implementation";
+        var declarations = generatorResult.GeneratedSources
+            .Single(sourceResult => sourceResult.HintName == "DependencyInjectionContainer.Declarations.g.cs")
+            .SourceText
+            .ToString();
+        declarations.ShouldContain(expectedMessage);
+        declarations.ShouldNotContain("null!");
+
+        var staticExtensions = generatorResult.GeneratedSources
+            .Single(sourceResult => sourceResult.HintName == "DependencyInjectionContainer.StaticExtensions.g.cs")
+            .SourceText
+            .ToString();
+        staticExtensions.ShouldContain(expectedMessage);
+
+        var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
+        var containerType = assembly.GetType($"{assemblyName}.Generated.DependencyInjectionContainer");
+        var serviceType = assembly.GetType($"{assemblyName}.IService");
+
+        containerType.ShouldNotBeNull();
+        serviceType.ShouldNotBeNull();
+
+        var container = (IContainer)Activator.CreateInstance(containerType!, new object[] { false })!;
+        var exception = Should.Throw<InvalidOperationException>(() => container.Resolve(serviceType!));
+        exception.Message.ShouldContain(expectedMessage);
+    }
+
+    [Test]
+    public void GeneratorDetectsCyclesThroughInjectedMethods()
+    {
+        const string source = """
+using FactoryGenerator.Attributes;
+
+namespace Sample
+{
+public interface IResult
+{
+}
+
+public class Result : IResult
+{
+}
+
+public interface IFactory
+{
+    [Inject]
+    IResult Create();
+}
+
+[Inject]
+public class Factory : IFactory
+{
+    public Factory(IResult result)
+    {
+    }
+
+    public IResult Create() => new Result();
+}
+}
+""";
+
+        var compilation = CreateCompilation(source);
+        var (runResult, _) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldNotBeNull();
+        generatorResult.Exception!.Message.ShouldContain("Cyclic Dependency Detected");
+        generatorResult.Exception.Message.ShouldContain("Sample.IResult");
+        generatorResult.Exception.Message.ShouldContain("Sample.IFactory");
+    }
+
+    [Test]
+    public void GeneratorDetectsCyclesThroughInjectedProperties()
+    {
+        const string source = """
+using FactoryGenerator.Attributes;
+
+namespace Sample
+{
+public interface IResult
+{
+}
+
+public class Result : IResult
+{
+}
+
+public interface IFactory
+{
+    [Inject]
+    IResult Value { get; }
+}
+
+[Inject]
+public class Factory : IFactory
+{
+    public Factory(IResult result)
+    {
+    }
+
+    public IResult Value => new Result();
+}
+}
+""";
+
+        var compilation = CreateCompilation(source);
+        var (runResult, _) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldNotBeNull();
+        generatorResult.Exception!.Message.ShouldContain("Cyclic Dependency Detected");
+        generatorResult.Exception.Message.ShouldContain("Sample.IResult");
+        generatorResult.Exception.Message.ShouldContain("Sample.IFactory");
+    }
+
+    [Test]
+    public void InjectedMethodsSurfaceExternalParametersAndHonorOptionalAndParamsArguments()
+    {
+        var assemblyName = "InjectedMethod" + Guid.NewGuid().ToString("N");
+        var source = $$"""
+using FactoryGenerator.Attributes;
+
+namespace {{assemblyName}}
+{
+public sealed class ExternalInput
+{
+    public ExternalInput(string name)
+    {
+        Name = name;
+    }
+
+    public string Name { get; }
+}
+
+public interface IPart
+{
+}
+
+[Inject]
+public class PartOne : IPart
+{
+}
+
+[Inject]
+public class PartTwo : IPart
+{
+}
+
+public interface IResult
+{
+}
+
+public sealed class Result : IResult
+{
+    public Result(string summary, int partCount)
+    {
+        Summary = summary;
+        PartCount = partCount;
+    }
+
+    public string Summary { get; }
+    public int PartCount { get; }
+}
+
+public interface IFactory
+{
+    [Inject]
+    IResult Create(ExternalInput input, string label = "default", params IPart[] parts);
+}
+
+[Inject]
+public class Factory : IFactory
+{
+    public IResult Create(ExternalInput input, string label = "default", params IPart[] parts)
+    {
+        return new Result(input.Name + ":" + label, parts.Length);
+    }
+}
+}
+""";
+
+        var compilation = CreateCompilation(assemblyName, source);
+        var (runResult, outputCompilation) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray()
+            .ShouldBeEmpty();
+
+        var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
+        var containerType = assembly.GetType($"{assemblyName}.Generated.DependencyInjectionContainer");
+        var externalType = assembly.GetType($"{assemblyName}.ExternalInput");
+        var serviceType = assembly.GetType($"{assemblyName}.IResult");
+
+        containerType.ShouldNotBeNull();
+        externalType.ShouldNotBeNull();
+        serviceType.ShouldNotBeNull();
+
+        var constructor = containerType!.GetConstructors()
+            .Single(ctor =>
+            {
+                var parameters = ctor.GetParameters();
+                return parameters.Length == 1 && parameters[0].ParameterType == externalType;
+            });
+
+        var external = Activator.CreateInstance(externalType!, "runtime");
+        var container = (IContainer)constructor.Invoke(new[] { external! });
+        var resolved = container.Resolve(serviceType!);
+
+        resolved.GetType().GetProperty("Summary")!.GetValue(resolved).ShouldBe("runtime:default");
+        resolved.GetType().GetProperty("PartCount")!.GetValue(resolved).ShouldBe(2);
+    }
+
+    [Test]
+    public void InjectedConstructorsHonorOptionalAndParamsArguments()
+    {
+        var assemblyName = "InjectedConstructor" + Guid.NewGuid().ToString("N");
+        var source = $$"""
+using FactoryGenerator.Attributes;
+
+namespace {{assemblyName}}
+{
+public interface IPart
+{
+}
+
+[Inject]
+public class PartOne : IPart
+{
+}
+
+[Inject]
+public class PartTwo : IPart
+{
+}
+
+[Inject, Self]
+public sealed class Consumer
+{
+    public Consumer(string label = "default", params IPart[] parts)
+    {
+        Summary = label;
+        PartCount = parts.Length;
+    }
+
+    public string Summary { get; }
+    public int PartCount { get; }
+}
+}
+""";
+
+        var compilation = CreateCompilation(assemblyName, source);
+        var (runResult, outputCompilation) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray()
+            .ShouldBeEmpty();
+
+        var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
+        var containerType = assembly.GetType($"{assemblyName}.Generated.DependencyInjectionContainer");
+        var consumerType = assembly.GetType($"{assemblyName}.Consumer");
+
+        containerType.ShouldNotBeNull();
+        consumerType.ShouldNotBeNull();
+
+        var container = (IContainer)Activator.CreateInstance(containerType!)!;
+        var resolved = container.Resolve(consumerType!);
+
+        resolved.GetType().GetProperty("Summary")!.GetValue(resolved).ShouldBe("default");
+        resolved.GetType().GetProperty("PartCount")!.GetValue(resolved).ShouldBe(2);
     }
 
     [Test]
@@ -204,7 +511,7 @@ var (baseReference, _) = EmitReference(baseCompilation);
         return (MetadataReference.CreateFromImage(image), image);
     }
 
-    private static byte[] EmitAssembly(CSharpCompilation compilation)
+    private static byte[] EmitAssembly(Compilation compilation)
     {
         using var stream = new MemoryStream();
         var result = compilation.Emit(stream);

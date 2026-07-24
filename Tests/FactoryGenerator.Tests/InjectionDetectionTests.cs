@@ -2,6 +2,7 @@ using Inherited;
 using Inheritor;
 using Inheritor.Generated;
 using Shouldly;
+using System.Threading.Tasks;
 using Type = Inherited.Type;
 
 namespace FactoryGenerator.Tests;
@@ -121,6 +122,21 @@ public class InjectionDetectionTests()
         try
         {
             m_container.Resolve<IDisposable>();
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        true.ShouldBeFalse();
+    }
+
+    [Test]
+    public void DontPickupIAsyncDisposable()
+    {
+        try
+        {
+            m_container.Resolve<IAsyncDisposable>();
         }
         catch (Exception)
         {
@@ -251,6 +267,45 @@ public class InjectionDetectionTests()
     }
 
     [Test]
+    public void DisposingContainerSynchronouslyWaitsForAsyncOnlyServices()
+    {
+        var myContainer = new DependencyInjectionContainer(false, default, default!);
+        var singleton = myContainer.Resolve<IAsyncSingletonDisposer>();
+
+        myContainer.Dispose();
+
+        singleton.ShouldBeOfType<AsyncDisposableSingleton>();
+        singleton.WasDisposed.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task AsyncDisposingContainerDisposesAsyncSingletons()
+    {
+        IAsyncSingletonDisposer singleton;
+        var myContainer = new DependencyInjectionContainer(false, default, default!);
+        singleton = myContainer.Resolve<IAsyncSingletonDisposer>();
+
+        await myContainer.DisposeAsync();
+
+        singleton.ShouldBeOfType<AsyncDisposableSingleton>();
+        singleton.WasDisposed.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task AsyncDisposingLifetimeContainerDisposesAsyncScoped()
+    {
+        var myContainer = new DependencyInjectionContainer(false, default, default!);
+        var lifetime = myContainer.BeginLifetimeScope();
+        var scoped = lifetime.Resolve<IAsyncScoped>();
+
+        await lifetime.DisposeAsync();
+
+        scoped.ShouldBeOfType<AsyncScoped>();
+        scoped.WasDisposed.ShouldBeTrue();
+        myContainer.Dispose();
+    }
+
+    [Test]
     public void ArrayExpressionsCollect()
     {
         m_container.Resolve<ArrayConsumer>().Arrays.Count().ShouldBe(3);
@@ -325,6 +380,27 @@ public class InjectionDetectionTests()
     {
         var newContainer = new DependencyInjectionContainer(new DummyContainer());
         newContainer.Resolve<string>().ShouldBe(DummyContainer.DummyText);
+    }
+
+    [Test]
+    public void HierarchicalContainersResolveCollectionsFromBaseWhenNoLocalImplementationExists()
+    {
+        var newContainer = new DependencyInjectionContainer(new DummyContainer());
+        newContainer.Resolve<FallbackCollectionConsumer>().Items.Count().ShouldBe(2);
+    }
+
+    [Test]
+    public void DirectCollectionResolveUsesBaseWhenNoLocalImplementationExists()
+    {
+        var newContainer = new DependencyInjectionContainer(new DummyContainer());
+        newContainer.Resolve<IEnumerable<IFallbackCollectionItem>>().Count().ShouldBe(2);
+    }
+
+    [Test]
+    public void StaticExtensionsUseContainerFallbackForCollectionsWithoutLocalImplementations()
+    {
+        var newContainer = new DependencyInjectionContainer(new DummyContainer());
+        FallbackCollectionConsumer.Resolve(newContainer).Items.Count().ShouldBe(2);
     }
 
     [Test]
@@ -465,6 +541,11 @@ public class InjectionDetectionTests()
     private class DummyContainer : IContainer
     {
         public const string DummyText = "I am a bit of text";
+        private static readonly IFallbackCollectionItem[] s_fallbackCollectionItems =
+        [
+            new DummyFallbackCollectionItem(),
+            new DummyFallbackCollectionItem()
+        ];
 
         public static NonInjectedClass m_dummy = new();
         public IContainer? Base => null;
@@ -498,12 +579,14 @@ public class InjectionDetectionTests()
         public T Resolve<T>()
         {
             if (typeof(T) == typeof(string)) return (T) (object) DummyText;
+            if (typeof(T) == typeof(IEnumerable<IFallbackCollectionItem>)) return (T) (object) s_fallbackCollectionItems;
             return (T) (object) m_dummy;
         }
 
         public object Resolve(System.Type type)
         {
             if (type == typeof(string)) return DummyText;
+            if (type == typeof(IEnumerable<IFallbackCollectionItem>)) return s_fallbackCollectionItems;
             return m_dummy;
         }
 
@@ -511,6 +594,7 @@ public class InjectionDetectionTests()
         {
             resolved = null;
             if (type == typeof(string)) resolved = DummyText;
+            if (type == typeof(IEnumerable<IFallbackCollectionItem>)) resolved = s_fallbackCollectionItems;
             return resolved != null;
         }
 
@@ -518,6 +602,7 @@ public class InjectionDetectionTests()
         {
             resolved = default;
             if (typeof(T) == typeof(string)) resolved = (T) (object) DummyText;
+            if (typeof(T) == typeof(IEnumerable<IFallbackCollectionItem>)) resolved = (T) (object) s_fallbackCollectionItems;
             return resolved != null;
         }
         public IEnumerable<(string Key, bool Value)> GetBooleans()
@@ -526,4 +611,6 @@ public class InjectionDetectionTests()
         }
 
     }
+
+    private sealed class DummyFallbackCollectionItem : IFallbackCollectionItem;
 }

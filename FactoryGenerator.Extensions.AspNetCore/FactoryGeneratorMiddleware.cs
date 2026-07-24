@@ -29,10 +29,9 @@ internal sealed class FactoryGeneratorMiddleware
         }
         finally
         {
-            // The FactoryGeneratorServiceProvider.Dispose will dispose the scope
             if (context.RequestServices is FactoryGeneratorServiceProvider wrapper)
             {
-                wrapper.Dispose();
+                await wrapper.DisposeAsync();
             }
             context.RequestServices = originalProvider;
         }

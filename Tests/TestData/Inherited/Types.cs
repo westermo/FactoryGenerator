@@ -1,5 +1,6 @@
 ﻿using FactoryGenerator.Attributes;
 using System.Collections.Immutable;
+using System.Threading.Tasks;
 
 namespace Inherited;
 
@@ -169,6 +170,14 @@ public class UnrequestedEnumerable1 : IUnrequestedEnumerable;
 [Inject]
 public class UnrequestedEnumerable2 : IUnrequestedEnumerable;
 
+public interface IFallbackCollectionItem;
+
+[Inject, Self]
+public class FallbackCollectionConsumer(IEnumerable<IFallbackCollectionItem> items)
+{
+    public IEnumerable<IFallbackCollectionItem> Items { get; } = items;
+}
+
 public interface IDisposer;
 
 public interface INotIDisposable;
@@ -208,6 +217,23 @@ public class DisposableSingleton : ISingletonDisposer, IDisposable
     }
 }
 
+public interface IAsyncSingletonDisposer
+{
+    bool WasDisposed { get; }
+}
+
+[Inject, Singleton]
+public class AsyncDisposableSingleton : IAsyncSingletonDisposer, IAsyncDisposable
+{
+    public bool WasDisposed { get; private set; }
+
+    public ValueTask DisposeAsync()
+    {
+        WasDisposed = true;
+        return default;
+    }
+}
+
 public interface IOverrideBoolean;
 
 [Inject, Boolean("A")]
@@ -223,6 +249,11 @@ public class Containing
 }
 
 public interface IScoped
+{
+    bool WasDisposed { get; }
+}
+
+public interface IAsyncScoped
 {
     bool WasDisposed { get; }
 }
@@ -257,6 +288,18 @@ public class Scoped : IDisposable, IScoped
     public void Dispose()
     {
         WasDisposed = true;
+    }
+}
+
+[Inject, Scoped]
+public class AsyncScoped : IAsyncScoped, IAsyncDisposable
+{
+    public bool WasDisposed { get; private set; }
+
+    public ValueTask DisposeAsync()
+    {
+        WasDisposed = true;
+        return default;
     }
 }
 

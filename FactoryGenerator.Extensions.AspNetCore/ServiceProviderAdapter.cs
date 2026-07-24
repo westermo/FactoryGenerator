@@ -1,11 +1,12 @@
 ﻿using System;
 using System.Collections.Generic;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FactoryGenerator.Extensions.AspNetCore;
 
 #nullable enable
-internal sealed class ServiceProviderAdapter : IContainer, IDisposable
+internal sealed class ServiceProviderAdapter : IContainer, IDisposable, IAsyncDisposable, IContainerLocalCollectionResolver, IServiceProviderBackedContainer
 {
     private readonly IServiceProvider _serviceProvider;
     private readonly IServiceScope? _serviceScope;
@@ -24,6 +25,15 @@ internal sealed class ServiceProviderAdapter : IContainer, IDisposable
     public void Dispose()
     {
         _serviceScope?.Dispose();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        if (_serviceScope is IAsyncDisposable asyncDisposable)
+            return asyncDisposable.DisposeAsync();
+
+        _serviceScope?.Dispose();
+        return default;
     }
 
     public T Resolve<T>()
@@ -58,6 +68,12 @@ internal sealed class ServiceProviderAdapter : IContainer, IDisposable
         return false;
     }
 
+    public bool TryResolveLocalCollection(Type type, out object? resolved)
+    {
+        resolved = _serviceProvider.GetService(type);
+        return resolved is not null;
+    }
+
     public bool IsRegistered(Type type)
     {
         // IServiceProvider doesn't have a reliable IsRegistered method without resolution.
@@ -80,7 +96,7 @@ internal sealed class ServiceProviderAdapter : IContainer, IDisposable
 
     public ILifetimeScope BeginLifetimeScope()
     {
-        var scope = _serviceProvider.CreateScope();
+        var scope = _serviceProvider.CreateAsyncScope();
         return new ServiceProviderAdapter(scope.ServiceProvider, scope, _baseContainer);
     }
 }

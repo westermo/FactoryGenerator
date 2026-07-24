@@ -103,6 +103,8 @@ public class Program
 ```
 Of note is perhaps `Generated.DependencyInjectionContainer`, this is the Compile-time created implementation of our IoC container, it implements the interface `FactoryGenerator.IContainer`.
 
+Generated containers also implement `IAsyncDisposable`. If you are working with an `ILifetimeScope` or `IContainer` reference, `await scope.DisposeAsync()` is the preferred path, but a synchronous `Dispose()` will also block until async-only services finish disposing.
+
 ### Attributes
 
 | Attribute                 |                                                                  Description                                                                          |     Requires |
@@ -117,6 +119,8 @@ Of note is perhaps `Generated.DependencyInjectionContainer`, this is the Compile
 | ```Boolean(string key)``` | Creates a Runtime switch to decide whether this type should be the one that gets resolved<br/>(or the best fitting fallback option, otherwise)        | ```Inject``` |
 
 `InjectionPriority(int)` is an **assembly-level** attribute rather than an injection attribute.
+
+If every implementation of a service is guarded by `[Boolean(...)]` and no ungated fallback exists, resolving that service throws `InvalidOperationException` when none of the booleans select an implementation.
 
 ### Overriding
 
@@ -183,6 +187,8 @@ public class Provider : IProvider
 ```
 With this code, it is now possible to do `container.Resolve<IResultType>()`, which will effectively return the result of `new Provider().Method()`, although, since `Method` is `[Inject]`ed as a `[Singleton]`, the result will be cached and the same instance will be returned at every call to `Resolve` as well as shared between all Injected implementations that require a `IResultType`.
 
+Injected method parameters follow the same rules as constructor parameters: unresolved external values are surfaced on the generated container constructor, optional parameters keep their declared defaults, and `params` collections are supplied from the container when possible.
+
 ### Static Extensions (C# 14 / .NET 10+)
 
 When targeting C# 14 or later, FactoryGenerator automatically emits [static extension methods](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#extension-members) for every registered interface. This provides a dictionary-free, inline resolution path that the JIT can aggressively optimize.
@@ -209,7 +215,7 @@ var fresh = ISingleton.Resolve(null);
 var switched = ISwitchableInterface.Resolve(testBool: true);
 ```
 
-Collection dependencies (`IEnumerable<T>`, arrays, `List<T>`, `ImmutableArray<T>`, `ReadOnlySpan<T>`) are resolved through the same generated static pipeline, so the extension path and the normal container path construct equivalent object graphs. Direct `Resolve<IEnumerable<T>>()` calls are generated for every registered service type, even when no constructor or source usage referenced that collection shape ahead of time.
+Collection dependencies (`IEnumerable<T>`, arrays, `List<T>`, `ImmutableArray<T>`, `ReadOnlySpan<T>`) are resolved through the same generated static pipeline, so the extension path and the normal container path construct equivalent object graphs. Direct `Resolve<IEnumerable<T>>()` calls are generated for every registered service type, even when no constructor or source usage referenced that collection shape ahead of time. If the current generated container has no local implementations for a collection element type, collection resolution still falls back to base containers and ASP.NET Core `IServiceProvider` sources.
 
 The static extensions are generated alongside the standard dictionary-based container and require no additional configuration. If the consuming project's language version is below C# 14, the extensions are simply not emitted.
 
@@ -253,6 +259,8 @@ app.Run();
 ```
 
 This integration allows you to inject standard framework services (like `IConfiguration` or `ILogger`) into your `[Inject]`ed classes, and ensures that `[Scoped]` services are correctly disposed of at the end of each HTTP request.
+
+If a request-scoped FactoryGenerator service only implements `IAsyncDisposable`, the middleware disposes it asynchronously at the end of the request.
 
 ### Plugin / AOT Container Loading
 FactoryGenerator supports a plugin architecture where multiple assemblies each generate their own container, and these containers are chained together at runtime. This works seamlessly with AOT-compiled assemblies since no reflection is involved — discovery is entirely push-based via ```[ModuleInitializer]```.

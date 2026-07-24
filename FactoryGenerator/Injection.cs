@@ -98,9 +98,13 @@ namespace FactoryGenerator
             interfaces = interfaces.AddRange(attributedInterfaces);
 
             var isDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.SpecialType == SpecialType.System_IDisposable);
+            var isAsyncDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.ToString() == "System.IAsyncDisposable");
             var disposableIface = interfaces.FirstOrDefault(i => i.SpecialType == SpecialType.System_IDisposable);
             if (disposableIface is not null)
                 interfaces = interfaces.Remove(disposableIface);
+            var asyncDisposableIface = interfaces.FirstOrDefault(i => i.ToString() == "System.IAsyncDisposable");
+            if (asyncDisposableIface is not null)
+                interfaces = interfaces.Remove(asyncDisposableIface);
 
             interfaces = interfaces
                 .RemoveRange(preventedInterfaces)
@@ -131,6 +135,7 @@ namespace FactoryGenerator
                 singleton: singleInstance,
                 scoped: scoped,
                 disposable: isDisposable,
+                asyncDisposable: isAsyncDisposable,
                 booleanInjection: boolean,
                 constructors: constructors,
                 lambda: lambdaData);

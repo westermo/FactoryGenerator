@@ -40,3 +40,12 @@ public interface IContainerCacheInvalidator
 {
     void InvalidateCollectionCaches();
 }
+
+public interface IContainerLocalCollectionResolver
+{
+    bool TryResolveLocalCollection(Type type, out object? resolved);
+}
+
+public interface IServiceProviderBackedContainer
+{
+}

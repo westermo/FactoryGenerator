@@ -17,6 +17,7 @@ namespace FactoryGenerator
         public bool Singleton { get; }
         public bool Scoped { get; }
         public bool Disposable { get; }
+        public bool AsyncDisposable { get; }
         public BooleanInjection? BooleanInjection { get; }
         public ImmutableArray<ConstructorData> Constructors { get; }
         public LambdaData? Lambda { get; }
@@ -28,7 +29,7 @@ namespace FactoryGenerator
         public InjectionData(
             string typeFullName, string typeMemberName, string assemblyName, int assemblyPriority,
             ImmutableArray<string> interfaceFullNames, ImmutableArray<string> interfaceMemberNames,
-            bool singleton, bool scoped, bool disposable,
+            bool singleton, bool scoped, bool disposable, bool asyncDisposable,
             BooleanInjection? booleanInjection,
             ImmutableArray<ConstructorData> constructors, LambdaData? lambda)
         {
@@ -41,6 +42,7 @@ namespace FactoryGenerator
             Singleton = singleton;
             Scoped = scoped;
             Disposable = disposable;
+            AsyncDisposable = asyncDisposable;
             BooleanInjection = booleanInjection;
             Constructors = constructors;
             Lambda = lambda;
@@ -59,6 +61,7 @@ namespace FactoryGenerator
                 && Singleton == other.Singleton
                 && Scoped == other.Scoped
                 && Disposable == other.Disposable
+                && AsyncDisposable == other.AsyncDisposable
                 && Equals(BooleanInjection, other.BooleanInjection)
                 && Constructors.SequenceEqual(other.Constructors)
                 && Equals(Lambda, other.Lambda);

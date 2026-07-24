@@ -1,10 +1,11 @@
 ﻿using System;
+using System.Threading.Tasks;
 using Microsoft.Extensions.DependencyInjection;
 
 namespace FactoryGenerator.Extensions.AspNetCore;
 
 #nullable enable
-internal sealed class FactoryGeneratorServiceProvider : IServiceProvider, ISupportRequiredService, IDisposable
+internal sealed class FactoryGeneratorServiceProvider : IServiceProvider, ISupportRequiredService, IDisposable, IAsyncDisposable
 {
     private readonly IServiceProvider _baseProvider;
     private readonly ILifetimeScope _scope;
@@ -49,5 +50,14 @@ internal sealed class FactoryGeneratorServiceProvider : IServiceProvider, ISuppo
     public void Dispose()
     {
         _scope.Dispose();
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        if (_scope is IAsyncDisposable asyncDisposable)
+            return asyncDisposable.DisposeAsync();
+
+        _scope.Dispose();
+        return default;
     }
 }
