@@ -1239,6 +1239,15 @@ public static class {className}
             // Transient + disposable: construct and register for disposal tracking.
             if (chosen.Disposable)
             {
+                if (creation != nullCreation)
+                {
+                    return $@"        public static {ifaceFull} Resolve({ClassName}? container)
+        {{
+            var value = container != null ? {creation} : {nullCreation};
+            container?.GetResolvedInstances().Add(new global::System.WeakReference<global::System.IDisposable>(value));
+            return value;
+        }}";
+                }
                 return $@"        public static {ifaceFull} Resolve({ClassName}? container)
         {{
             var value = {creation};
@@ -1248,6 +1257,10 @@ public static class {className}
             }
 
             // Transient, non-disposable: pure inline factory chain.
+            if (creation != nullCreation)
+            {
+                return $"        public static {ifaceFull} Resolve({ClassName}? container) => container != null ? {creation} : {nullCreation};";
+            }
             return $"        public static {ifaceFull} Resolve({ClassName}? container) => {creation};";
         }
 
