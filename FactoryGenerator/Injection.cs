@@ -41,6 +41,9 @@ namespace FactoryGenerator
             }
 
             if (namedTypeSymbol is null) return null;
+            var assembly = symbol.ContainingAssembly ?? namedTypeSymbol.ContainingAssembly;
+            var assemblyName = assembly?.Name ?? string.Empty;
+            var assemblyPriority = GetAssemblyPriority(assembly);
 
             var singleInstance = false;
             var acquireChildInterfaces = false;
@@ -94,10 +97,14 @@ namespace FactoryGenerator
                 interfaces = interfaces.Add(namedTypeSymbol);
             interfaces = interfaces.AddRange(attributedInterfaces);
 
-            var isDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.Name.Equals("IDisposable"));
-            var disposableIface = interfaces.FirstOrDefault(i => i.Name.Contains("IDisposable"));
+            var isDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.SpecialType == SpecialType.System_IDisposable);
+            var isAsyncDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.ToString() == "System.IAsyncDisposable");
+            var disposableIface = interfaces.FirstOrDefault(i => i.SpecialType == SpecialType.System_IDisposable);
             if (disposableIface is not null)
                 interfaces = interfaces.Remove(disposableIface);
+            var asyncDisposableIface = interfaces.FirstOrDefault(i => i.ToString() == "System.IAsyncDisposable");
+            if (asyncDisposableIface is not null)
+                interfaces = interfaces.Remove(asyncDisposableIface);
 
             interfaces = interfaces
                 .RemoveRange(preventedInterfaces)
@@ -121,12 +128,14 @@ namespace FactoryGenerator
             return new InjectionData(
                 typeFullName: namedTypeSymbol.ToString()!,
                 typeMemberName: typeMemberName,
-                isTestType: namedTypeSymbol.ToString()!.Contains("Test"),
+                assemblyName: assemblyName,
+                assemblyPriority: assemblyPriority,
                 interfaceFullNames: ifaceFullNames,
                 interfaceMemberNames: ifaceMemberNames,
                 singleton: singleInstance,
                 scoped: scoped,
                 disposable: isDisposable,
+                asyncDisposable: isAsyncDisposable,
                 booleanInjection: boolean,
                 constructors: constructors,
                 lambda: lambdaData);
@@ -167,6 +176,24 @@ namespace FactoryGenerator
             if (attributeData.ConstructorArguments[0].Value is string key)
                 return new BooleanInjection(true, key);
             return null;
+        }
+
+        private static int GetAssemblyPriority(IAssemblySymbol? assemblySymbol)
+        {
+            if (assemblySymbol is null)
+                return 0;
+
+            foreach (var attributeData in assemblySymbol.GetAttributes())
+            {
+                if (attributeData.AttributeClass?.ToString() != "FactoryGenerator.Attributes.InjectionPriorityAttribute")
+                    continue;
+
+                if (attributeData.ConstructorArguments.Length == 1
+                    && attributeData.ConstructorArguments[0].Value is int priority)
+                    return priority;
+            }
+
+            return 0;
         }
     }
 }

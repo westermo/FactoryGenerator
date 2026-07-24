@@ -1,5 +1,4 @@
 using System;
-using System.Collections;
 using System.Collections.Generic;
 
 namespace FactoryGenerator;
@@ -25,4 +24,28 @@ public interface IContainer : ILifetimeScope
 {
     IContainer? Base { get; }
     IContainer? Inheritor { get; set; }
+}
+
+public interface IContainerScopeFactory
+{
+    ILifetimeScope BeginLifetimeScope(IContainer? baseContainer);
+}
+
+public interface IContainerRegistrationMetadata
+{
+    string AssemblyName { get; }
+}
+
+public interface IContainerCacheInvalidator
+{
+    void InvalidateCollectionCaches();
+}
+
+public interface IContainerLocalCollectionResolver
+{
+    bool TryResolveLocalCollection(Type type, out object? resolved);
+}
+
+public interface IServiceProviderBackedContainer
+{
 }

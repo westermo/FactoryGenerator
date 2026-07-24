@@ -1,7 +1,5 @@
 ﻿using System.Threading.Tasks;
-using FactoryGenerator;
 using Microsoft.AspNetCore.Http;
-using Microsoft.Extensions.DependencyInjection;
 
 namespace FactoryGenerator.Extensions.AspNetCore;
 
@@ -18,8 +16,11 @@ internal sealed class FactoryGeneratorMiddleware
 
     public async Task Invoke(HttpContext context)
     {
-        var scope = _container.BeginLifetimeScope();
         var originalProvider = context.RequestServices;
+        var requestContainer = new ServiceProviderAdapter(originalProvider, baseContainer: _container);
+        var scope = _container is IContainerScopeFactory scopeFactory
+            ? scopeFactory.BeginLifetimeScope(requestContainer)
+            : _container.BeginLifetimeScope();
         context.RequestServices = new FactoryGeneratorServiceProvider(originalProvider, scope);
 
         try
@@ -28,10 +29,9 @@ internal sealed class FactoryGeneratorMiddleware
         }
         finally
         {
-            // The FactoryGeneratorServiceProvider.Dispose will dispose the scope
             if (context.RequestServices is FactoryGeneratorServiceProvider wrapper)
             {
-                wrapper.Dispose();
+                await wrapper.DisposeAsync();
             }
             context.RequestServices = originalProvider;
         }

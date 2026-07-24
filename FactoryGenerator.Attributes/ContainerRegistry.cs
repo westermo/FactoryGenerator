@@ -42,9 +42,12 @@ public static class ContainerRegistry
             snapshot = s_registrations.OrderBy(r => r.Priority).ToList();
         }
 
+        var existingAssemblies = GetAssemblyNames(baseContainer);
         var current = baseContainer;
         foreach (var registration in snapshot)
         {
+            if (!existingAssemblies.Add(registration.AssemblyName))
+                continue;
             current = registration.Factory(current);
         }
 
@@ -65,9 +68,13 @@ public static class ContainerRegistry
             snapshot = new List<ContainerRegistration>(s_registrations);
         }
 
+        var existingAssemblies = GetAssemblyNames(baseContainer);
         var current = baseContainer;
         foreach (var name in assemblyNames)
         {
+            if (!existingAssemblies.Add(name))
+                continue;
+
             var registration = snapshot.Find(r => r.AssemblyName == name);
             if (registration == null)
             {
@@ -80,6 +87,25 @@ public static class ContainerRegistry
         }
 
         return current;
+    }
+
+    private static HashSet<string> GetAssemblyNames(IContainer container)
+    {
+        var names = new HashSet<string>(StringComparer.Ordinal);
+
+        for (var current = container; current is not null; current = current.Base)
+        {
+            if (current is IContainerRegistrationMetadata metadata)
+                names.Add(metadata.AssemblyName);
+        }
+
+        for (var current = container.Inheritor; current is not null; current = current.Inheritor)
+        {
+            if (current is IContainerRegistrationMetadata metadata)
+                names.Add(metadata.AssemblyName);
+        }
+
+        return names;
     }
 
     /// <summary>

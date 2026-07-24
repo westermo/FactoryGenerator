@@ -21,7 +21,6 @@
 [Rr]elease-x86/
 [Dd]ebug-x86/
 x64/
-build/
 bld/
 [Bb]in/
 [Oo]bj/

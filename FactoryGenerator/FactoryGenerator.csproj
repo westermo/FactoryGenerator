@@ -12,9 +12,10 @@
     <ItemGroup>
         <PackageReference Include="Microsoft.CodeAnalysis.Common"/>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
-        <PackageReference Include="Microsoft.CodeAnalysis.Workspaces.Common"/>
     </ItemGroup>
     <ItemGroup>
         <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
+        <None Include="build\FactoryGenerator.props" Pack="true" PackagePath="build\" Visible="false"/>
+        <None Include="build\FactoryGenerator.props" Pack="true" PackagePath="buildTransitive\" Visible="false"/>
     </ItemGroup>
 </Project>

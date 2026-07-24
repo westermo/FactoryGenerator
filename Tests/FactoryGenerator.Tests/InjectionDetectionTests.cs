@@ -1,8 +1,8 @@
-using System.ComponentModel;
 using Inherited;
 using Inheritor;
 using Inheritor.Generated;
 using Shouldly;
+using System.Threading.Tasks;
 using Type = Inherited.Type;
 
 namespace FactoryGenerator.Tests;
@@ -11,13 +11,16 @@ public class InjectionDetectionTests()
 {
     private readonly IContainer m_container = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
-    [Fact]
+    [After(Test)]
+    public void DisposeContainer() => m_container.Dispose();
+
+    [Test]
     public void InjectedTypesAreResolvable()
     {
         m_container.Resolve<IType>().ShouldBeOfType<Type>();
     }
 
-    [Fact]
+    [Test]
     public void SingletonInjectionsResolveToTheSameInstanceEverytime()
     {
         var first = m_container.Resolve<ISingleton>();
@@ -25,7 +28,7 @@ public class InjectionDetectionTests()
         ReferenceEquals(first, second).ShouldBeTrue();
     }
 
-    [Fact]
+    [Test]
     public void NonSingleInjectionsResolveToDifferentInstanceEverytime()
     {
         var first = m_container.Resolve<IType>();
@@ -33,7 +36,7 @@ public class InjectionDetectionTests()
         ReferenceEquals(first, second).ShouldBeFalse();
     }
 
-    [Fact]
+    [Test]
     public void ResolveUsesArguments()
     {
         var dummy = new NonInjectedClass();
@@ -41,22 +44,64 @@ public class InjectionDetectionTests()
         myContainer.Resolve<Constructed>().NonInjectedClassArgument.ShouldBe(dummy);
     }
 
-    [Theory]
-    [InlineData(true, typeof(EnabledImplementation))]
-    [InlineData(false, typeof(FallbackImplementation))]
+    [Test]
+    public void StaticExtensionsPropagateDirectExternalArguments()
+    {
+        var dummy = new NonInjectedClass();
+        Constructed.Resolve(dummy).NonInjectedClassArgument.ShouldBe(dummy);
+    }
+
+    [Test]
+    public void StaticExtensionsPropagateTransitiveExternalArguments()
+    {
+        var dummy = new NonInjectedClass();
+        ConstructedConsumer.Resolve(dummy).Value.NonInjectedClassArgument.ShouldBe(dummy);
+    }
+
+    [Test]
+    public void StaticExtensionsPropagateExternalArgumentsIntoCollections()
+    {
+        var dummy = new NonInjectedClass();
+        ConstructedArrayConsumer.Resolve(dummy).Items.ShouldHaveSingleItem().NonInjectedClassArgument.ShouldBe(dummy);
+    }
+
+    [Test]
+    [Arguments(true, typeof(EnabledImplementation))]
+    [Arguments(false, typeof(FallbackImplementation))]
     public void PickupSingleInjectionWithBoolean(bool value, System.Type expected)
     {
         var myContainer = new DependencyInjectionContainer(value, default, default!);
         myContainer.Resolve<ISwitchableInterface>().ShouldBeOfType(expected);
     }
 
-    [Fact]
+    [Test]
+    public void StaticExtensionsPropagateDirectBooleanArguments()
+    {
+        ISwitchableInterface.Resolve(true).ShouldBeOfType<EnabledImplementation>();
+        ISwitchableInterface.Resolve(false).ShouldBeOfType<FallbackImplementation>();
+    }
+
+    [Test]
+    public void StaticExtensionsPropagateTransitiveBooleanArguments()
+    {
+        BooleanConsumer.Resolve(true).Value.ShouldBeOfType<EnabledImplementation>();
+        BooleanConsumer.Resolve(false).Value.ShouldBeOfType<FallbackImplementation>();
+    }
+
+    [Test]
+    public void StaticExtensionsPropagateBooleanArgumentsIntoCollections()
+    {
+        SwitchableArrayConsumer.Resolve(false).Items.Count().ShouldBe(1);
+        SwitchableArrayConsumer.Resolve(true).Items.Count().ShouldBe(2);
+    }
+
+    [Test]
     public void PickupSingleInjectionFromMethod()
     {
         m_container.Resolve<IMethodResult>().ShouldBeOfType<MethodResult>();
     }
 
-    [Fact]
+    [Test]
     public void DoNotPickupNonInjection()
     {
         try
@@ -71,7 +116,7 @@ public class InjectionDetectionTests()
         true.ShouldBeFalse();
     }
 
-    [Fact]
+    [Test]
     public void DontPickupIDisposable()
     {
         try
@@ -86,7 +131,34 @@ public class InjectionDetectionTests()
         true.ShouldBeFalse();
     }
 
-    [Fact]
+    [Test]
+    public void DontPickupIAsyncDisposable()
+    {
+        try
+        {
+            m_container.Resolve<IAsyncDisposable>();
+        }
+        catch (Exception)
+        {
+            return;
+        }
+
+        true.ShouldBeFalse();
+    }
+
+    [Test]
+    public void InterfacesContainingIDisposableInTheNameRemainResolvable()
+    {
+        m_container.Resolve<INotIDisposable>().ShouldBeOfType<NotDisposableNameMatch>();
+    }
+
+    [Test]
+    public void NonSystemIDisposableInterfacesRemainResolvable()
+    {
+        m_container.Resolve<CustomDisposableTypes.IDisposable>().ShouldBeOfType<CustomDisposableTypes.CustomDisposable>();
+    }
+
+    [Test]
     public void DontPickupExcluded()
     {
         try
@@ -101,26 +173,38 @@ public class InjectionDetectionTests()
         true.ShouldBeFalse();
     }
 
-    [Fact]
+    [Test]
     public void PickupTypesSpecifiedByAs()
     {
         m_container.Resolve<IPresent>().ShouldBeOfType<Composite>();
     }
 
-    [Fact]
+    [Test]
     public void PickupInheritedInterfaces()
     {
         m_container.Resolve<ISub>().ShouldBeOfType<Inherited.Inheritor>();
     }
 
-    [Fact]
+    [Test]
     public void InheritorsOverride()
     {
         m_container.Resolve<IOverridable>().ShouldBeOfType<Overrider>();
     }
 
+    [Test]
+    public void OverrideImplementationsPreventFalsePositiveCycleDetection()
+    {
+        m_container.Resolve<IOverrideCycle>().ShouldBeOfType<OverrideCycleResolved>();
+    }
 
-    [Fact]
+    [Test]
+    public void BestConstructorsPreventFalsePositiveCycleDetection()
+    {
+        m_container.Resolve<IMultiConstructorCycle>().ShouldBeOfType<MultiConstructorCycle>();
+    }
+
+
+    [Test]
     public void DisposingContainerDisposesSingletons()
     {
         ISingletonDisposer singleton;
@@ -132,7 +216,7 @@ public class InjectionDetectionTests()
         ((DisposableSingleton) singleton).WasDisposed.ShouldBeTrue();
     }
 
-    [Fact]
+    [Test]
     public void DisposingLifetimeContainerDoesNotDisposeSingletons()
     {
         ISingletonDisposer singleton;
@@ -150,7 +234,7 @@ public class InjectionDetectionTests()
         ((DisposableSingleton) singleton).WasDisposed.ShouldBeTrue();
     }
 
-    [Fact]
+    [Test]
     public void DisposingLifetimeContainerDisposesScoped()
     {
         IScoped singleton;
@@ -164,7 +248,7 @@ public class InjectionDetectionTests()
         singleton.WasDisposed.ShouldBeTrue();
     }
 
-    [Fact]
+    [Test]
     public void DisposingContainerDoesNotDisposeUntrackedInstances()
     {
         IDisposer singleton;
@@ -176,50 +260,108 @@ public class InjectionDetectionTests()
         ((DisposableNonSingleton) singleton).WasDisposed.ShouldBeTrue();
     }
 
-    [Fact]
+    [Test]
     public void DisposingContainerDoesNotDisposesUnreferencedSingletons()
     {
         using var myContainer = new DependencyInjectionContainer(false, default, default!);
     }
 
-    [Fact]
+    [Test]
+    public void DisposingContainerSynchronouslyWaitsForAsyncOnlyServices()
+    {
+        var myContainer = new DependencyInjectionContainer(false, default, default!);
+        var singleton = myContainer.Resolve<IAsyncSingletonDisposer>();
+
+        myContainer.Dispose();
+
+        singleton.ShouldBeOfType<AsyncDisposableSingleton>();
+        singleton.WasDisposed.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task AsyncDisposingContainerDisposesAsyncSingletons()
+    {
+        IAsyncSingletonDisposer singleton;
+        var myContainer = new DependencyInjectionContainer(false, default, default!);
+        singleton = myContainer.Resolve<IAsyncSingletonDisposer>();
+
+        await myContainer.DisposeAsync();
+
+        singleton.ShouldBeOfType<AsyncDisposableSingleton>();
+        singleton.WasDisposed.ShouldBeTrue();
+    }
+
+    [Test]
+    public async Task AsyncDisposingLifetimeContainerDisposesAsyncScoped()
+    {
+        var myContainer = new DependencyInjectionContainer(false, default, default!);
+        var lifetime = myContainer.BeginLifetimeScope();
+        var scoped = lifetime.Resolve<IAsyncScoped>();
+
+        await lifetime.DisposeAsync();
+
+        scoped.ShouldBeOfType<AsyncScoped>();
+        scoped.WasDisposed.ShouldBeTrue();
+        myContainer.Dispose();
+    }
+
+    [Test]
     public void ArrayExpressionsCollect()
     {
         m_container.Resolve<ArrayConsumer>().Arrays.Count().ShouldBe(3);
     }
 
-    [Fact]
+    [Test]
+    public void StaticExtensionsResolveCollectionsInNullContainerMode()
+    {
+        ArrayConsumer.Resolve(null).Arrays.Count().ShouldBe(3);
+    }
+
+    [Test]
     public void RequestedArraysArePresent()
     {
         Program.Method().Count().ShouldBe(3);
     }
 
-    [Fact]
+    [Test]
+    public void EnumerablesAreResolvableWithoutUsageSites()
+    {
+        m_container.Resolve<IEnumerable<IUnrequestedEnumerable>>().Count().ShouldBe(2);
+    }
+
+    [Test]
+    public void DuplicateRequestedArrayUsagesDoNotDuplicateLookupKeys()
+    {
+        Program.Method().Count().ShouldBe(3);
+        Program.MethodAgain().Count().ShouldBe(3);
+    }
+
+    [Test]
     public void BooleanFallbackIsOverriden()
     {
         m_container.Resolve<IOverrideBoolean>().ShouldBeOfType<OverridingBoolean>();
     }
 
-    [Fact]
+    [Test]
     public void TryResolveWithTypeArgumentsWorks()
     {
         m_container.TryResolve<IType>(out var type).ShouldBeTrue();
         type.ShouldBeOfType<Type>();
     }
 
-    [Fact]
+    [Test]
     public void TryResolveWithTypeParameterWorks()
     {
         m_container.TryResolve(typeof(IType), out var type).ShouldBeTrue();
         type.ShouldBeOfType<Type>();
     }
 
-    [Fact]
+    [Test]
     public void ClassesInsideOtherClassesCanBeInjected()
     {
         m_container.Resolve<Containing.Containee>();
     }
-    [Fact]
+    [Test]
     public void ContainerMayCreateItself()
     {
         var newContainer = new DependencyInjectionContainer(m_container);
@@ -227,20 +369,41 @@ public class InjectionDetectionTests()
         resolved.Count().ShouldBe(6);
         var nonInjected = m_container.Resolve<Inherited.NonInjectedClass>();
     }
-    [Fact]
+    [Test]
     public void HierarchicalContainersResolveArraysProperly()
     {
         var newContainer = new DependencyInjectionContainer(m_container);
         newContainer.Resolve<ArrayConsumer>().Arrays.Count().ShouldBe(6);
     }
-    [Fact]
+    [Test]
     public void HierarchicalContainersResolveUsesFallBackIfItCannotFindImplementation()
     {
         var newContainer = new DependencyInjectionContainer(new DummyContainer());
         newContainer.Resolve<string>().ShouldBe(DummyContainer.DummyText);
     }
 
-    [Fact]
+    [Test]
+    public void HierarchicalContainersResolveCollectionsFromBaseWhenNoLocalImplementationExists()
+    {
+        var newContainer = new DependencyInjectionContainer(new DummyContainer());
+        newContainer.Resolve<FallbackCollectionConsumer>().Items.Count().ShouldBe(2);
+    }
+
+    [Test]
+    public void DirectCollectionResolveUsesBaseWhenNoLocalImplementationExists()
+    {
+        var newContainer = new DependencyInjectionContainer(new DummyContainer());
+        newContainer.Resolve<IEnumerable<IFallbackCollectionItem>>().Count().ShouldBe(2);
+    }
+
+    [Test]
+    public void StaticExtensionsUseContainerFallbackForCollectionsWithoutLocalImplementations()
+    {
+        var newContainer = new DependencyInjectionContainer(new DummyContainer());
+        FallbackCollectionConsumer.Resolve(newContainer).Items.Count().ShouldBe(2);
+    }
+
+    [Test]
     public void ContainerPropgatesRelevantBooleansCreateItself()
     {
         var baseContainer = new DependencyInjectionContainer(true, false, new());
@@ -252,7 +415,7 @@ public class InjectionDetectionTests()
         newContainer.GetBoolean("A").ShouldBeFalse();
         newContainer.GetBoolean("TestBool").ShouldBeTrue();
     }
-    [Fact]
+    [Test]
     public void HierarchicalContainersPropgatesBooleansUnknownToIt()
     {
         var newContainer = new DependencyInjectionContainer(new DummyContainer());
@@ -260,15 +423,46 @@ public class InjectionDetectionTests()
         newContainer.GetBoolean("C").ShouldBe(false);
     }
 
+    [Test]
+    public void DisposingChildContainerDoesNotDisposeBaseContainer()
+    {
+        var baseContainer = new DependencyInjectionContainer(false, default, default!);
+        var singleton = baseContainer.Resolve<ISingletonDisposer>().ShouldBeOfType<DisposableSingleton>();
+        var child = new DependencyInjectionContainer(baseContainer);
+
+        child.Dispose();
+
+        singleton.WasDisposed.ShouldBeFalse();
+        baseContainer.Inheritor.ShouldBeNull();
+
+        baseContainer.Dispose();
+        singleton.WasDisposed.ShouldBeTrue();
+    }
+
+    [Test]
+    public void DisposingChildContainerUnregistersItFromParentCollections()
+    {
+        var parent = new DependencyInjectionContainer(false, false, new NonInjectedClass());
+        var child = new DependencyInjectionContainer(parent);
+
+        parent.Resolve<IEnumerable<IArray>>().Count().ShouldBe(6);
+
+        child.Dispose();
+
+        parent.Resolve<IEnumerable<IArray>>().Count().ShouldBe(3);
+        parent.Inheritor.ShouldBeNull();
+        parent.Dispose();
+    }
+
     // ── Nullable parameter tests ──────────────────────────────────────────────
 
-    [Fact]
+    [Test]
     public void NullableUnregisteredParameterDefaultsToNull()
     {
         m_container.Resolve<NullableConsumer>().Optional.ShouldBeNull();
     }
 
-    [Fact]
+    [Test]
     public void NullableRegisteredParameterIsResolved()
     {
         m_container.Resolve<NullablePresentConsumer>().Optional.ShouldBeOfType<NullablePresent>();
@@ -276,32 +470,82 @@ public class InjectionDetectionTests()
 
     // ── Collection constructor parameter tests ────────────────────────────────
 
-    [Fact]
+    [Test]
     public void ArrayConstructorParameterIsResolved()
     {
         m_container.Resolve<ArrayParameterConsumer>().Arrays.Length.ShouldBe(3);
     }
 
-    [Fact]
+    [Test]
     public void ListConstructorParameterIsResolved()
     {
         m_container.Resolve<ListConsumer>().Arrays.Count.ShouldBe(3);
     }
 
-    [Fact]
+    [Test]
     public void ImmutableArrayConstructorParameterIsResolved()
     {
         m_container.Resolve<ImmutableArrayConsumer>().Arrays.Length.ShouldBe(3);
     }
 
-    [Fact]
+    [Test]
     public void ReadOnlySpanConstructorParameterIsResolved()
     {
         m_container.Resolve<ReadOnlySpanConsumer>().Count.ShouldBe(3);
     }
+
+    // ── Cross-array reentrancy tests ──────────────────────────────────────────
+    // Ensures that reentrancy guards are per-array-type, not global.  Resolving
+    // IEnumerable<ICrossArrayA> triggers construction of CrossA3 which needs
+    // IEnumerable<ICrossArrayB>.  That second resolution must not be blocked.
+
+    [Test]
+    public void CrossArrayReentrancyResolvesAllA()
+    {
+        var items = m_container.Resolve<CrossArrayConsumer>().Items.ToList();
+        items.Count.ShouldBe(3);
+    }
+
+    [Test]
+    public void CrossArrayReentrancyResolvesBInsideCrossA3()
+    {
+        var items = m_container.Resolve<CrossArrayConsumer>().Items.ToList();
+        var crossA3 = items.OfType<CrossA3>().ShouldHaveSingleItem();
+        crossA3.Deps.Count().ShouldBe(2);
+    }
+
+    // ── Inheritor + Base array tests ──────────────────────────────────────────
+
+    [Test]
+    public void InheritorAndBaseContainerMergeArrays()
+    {
+        var parent = new DependencyInjectionContainer(false, false, new NonInjectedClass());
+        var child = new DependencyInjectionContainer(parent);
+        // Inherited defines SplitBase1 + SplitBase2 (2 items per container).
+        // Inheritor defines SplitInheritor1..3 (3 more per container).
+        // Each standalone container has 5.  After merging, the child sees its own 5
+        // plus the parent's 5 = 10.
+        child.Resolve<SplitArrayConsumer>().Items.Count().ShouldBe(10);
+    }
+
+    [Test]
+    public void BaseContainerSeesInheritorArraysAfterLinking()
+    {
+        var parent = new DependencyInjectionContainer(false, false, new NonInjectedClass());
+        var child = new DependencyInjectionContainer(parent);
+        // After linking, the parent's Inheritor is the child.  Resolving on the
+        // parent should now include its own 5 plus the child's 5 = 10.
+        parent.Resolve<SplitArrayConsumer>().Items.Count().ShouldBe(10);
+    }
+
     private class DummyContainer : IContainer
     {
         public const string DummyText = "I am a bit of text";
+        private static readonly IFallbackCollectionItem[] s_fallbackCollectionItems =
+        [
+            new DummyFallbackCollectionItem(),
+            new DummyFallbackCollectionItem()
+        ];
 
         public static NonInjectedClass m_dummy = new();
         public IContainer? Base => null;
@@ -335,12 +579,14 @@ public class InjectionDetectionTests()
         public T Resolve<T>()
         {
             if (typeof(T) == typeof(string)) return (T) (object) DummyText;
+            if (typeof(T) == typeof(IEnumerable<IFallbackCollectionItem>)) return (T) (object) s_fallbackCollectionItems;
             return (T) (object) m_dummy;
         }
 
         public object Resolve(System.Type type)
         {
             if (type == typeof(string)) return DummyText;
+            if (type == typeof(IEnumerable<IFallbackCollectionItem>)) return s_fallbackCollectionItems;
             return m_dummy;
         }
 
@@ -348,6 +594,7 @@ public class InjectionDetectionTests()
         {
             resolved = null;
             if (type == typeof(string)) resolved = DummyText;
+            if (type == typeof(IEnumerable<IFallbackCollectionItem>)) resolved = s_fallbackCollectionItems;
             return resolved != null;
         }
 
@@ -355,6 +602,7 @@ public class InjectionDetectionTests()
         {
             resolved = default;
             if (typeof(T) == typeof(string)) resolved = (T) (object) DummyText;
+            if (typeof(T) == typeof(IEnumerable<IFallbackCollectionItem>)) resolved = (T) (object) s_fallbackCollectionItems;
             return resolved != null;
         }
         public IEnumerable<(string Key, bool Value)> GetBooleans()
@@ -363,4 +611,6 @@ public class InjectionDetectionTests()
         }
 
     }
+
+    private sealed class DummyFallbackCollectionItem : IFallbackCollectionItem;
 }

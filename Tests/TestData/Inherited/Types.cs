@@ -1,6 +1,6 @@
 ﻿using FactoryGenerator.Attributes;
-using System.Collections.Generic;
 using System.Collections.Immutable;
+using System.Threading.Tasks;
 
 namespace Inherited;
 
@@ -8,11 +8,19 @@ public interface IType;
 
 public interface IOverridable;
 
+public interface IOverrideCycle;
+
 [Inject]
 public class Type : IType;
 
 [Inject]
 public class Overriden : IOverridable;
+
+[Inject]
+public class OverrideCycleBase(IOverrideCycle self) : IOverrideCycle
+{
+    public IOverrideCycle Self { get; } = self;
+}
 
 public interface ISingleton;
 
@@ -44,7 +52,48 @@ public class Constructed(NonInjectedClass nonInjectedClassArgument, ISingleton i
     public ISingleton InjectedArgument { get; } = injectedArgument;
 }
 
+[Inject, Self]
+public class ConstructedConsumer(Constructed value)
+{
+    public Constructed Value { get; } = value;
+}
+
+[Inject, Self]
+public class ConstructedArrayConsumer(IEnumerable<Constructed> items)
+{
+    public IEnumerable<Constructed> Items { get; } = items;
+}
+
+[Inject, Self]
+public class BooleanConsumer(ISwitchableInterface value)
+{
+    public ISwitchableInterface Value { get; } = value;
+}
+
+[Inject, Self]
+public class SwitchableArrayConsumer(IEnumerable<ISwitchableInterface> items)
+{
+    public IEnumerable<ISwitchableInterface> Items { get; } = items;
+}
+
 public interface IMethodResult;
+
+public interface IMultiConstructorCycle;
+
+public class ExternalOnlyDependency;
+
+[Inject]
+public class MultiConstructorCycle : IMultiConstructorCycle
+{
+    public MultiConstructorCycle()
+    {
+    }
+
+    public MultiConstructorCycle(IMultiConstructorCycle self, ExternalOnlyDependency externalOnlyDependency)
+        : this()
+    {
+    }
+}
 
 public class MethodResult : IMethodResult;
 
@@ -113,7 +162,36 @@ public class RequestedArray2 : IRequestedArray;
 [Inject]
 public class RequestedArray3 : IRequestedArray;
 
+public interface IUnrequestedEnumerable;
+
+[Inject]
+public class UnrequestedEnumerable1 : IUnrequestedEnumerable;
+
+[Inject]
+public class UnrequestedEnumerable2 : IUnrequestedEnumerable;
+
+public interface IFallbackCollectionItem;
+
+[Inject, Self]
+public class FallbackCollectionConsumer(IEnumerable<IFallbackCollectionItem> items)
+{
+    public IEnumerable<IFallbackCollectionItem> Items { get; } = items;
+}
+
 public interface IDisposer;
+
+public interface INotIDisposable;
+
+[Inject]
+public class NotDisposableNameMatch : INotIDisposable;
+
+public class CustomDisposableTypes
+{
+    public interface IDisposable;
+
+    [Inject]
+    public class CustomDisposable : IDisposable;
+}
 
 [Inject]
 public class DisposableNonSingleton : IDisposer, IDisposable
@@ -139,6 +217,23 @@ public class DisposableSingleton : ISingletonDisposer, IDisposable
     }
 }
 
+public interface IAsyncSingletonDisposer
+{
+    bool WasDisposed { get; }
+}
+
+[Inject, Singleton]
+public class AsyncDisposableSingleton : IAsyncSingletonDisposer, IAsyncDisposable
+{
+    public bool WasDisposed { get; private set; }
+
+    public ValueTask DisposeAsync()
+    {
+        WasDisposed = true;
+        return default;
+    }
+}
+
 public interface IOverrideBoolean;
 
 [Inject, Boolean("A")]
@@ -154,6 +249,11 @@ public class Containing
 }
 
 public interface IScoped
+{
+    bool WasDisposed { get; }
+}
+
+public interface IAsyncScoped
 {
     bool WasDisposed { get; }
 }
@@ -188,6 +288,18 @@ public class Scoped : IDisposable, IScoped
     public void Dispose()
     {
         WasDisposed = true;
+    }
+}
+
+[Inject, Scoped]
+public class AsyncScoped : IAsyncScoped, IAsyncDisposable
+{
+    public bool WasDisposed { get; private set; }
+
+    public ValueTask DisposeAsync()
+    {
+        WasDisposed = true;
+        return default;
     }
 }
 
@@ -237,4 +349,62 @@ public class ImmutableArrayConsumer(ImmutableArray<IArray> arrays)
 public class ReadOnlySpanConsumer(ReadOnlySpan<IArray> arrays)
 {
     public int Count { get; } = arrays.Length;
+}
+
+// ── Cross-array reentrancy tests ─────────────────────────────────────────────
+// Resolving IEnumerable<ICrossArrayA> should work even though CrossA3 depends on
+// IEnumerable<ICrossArrayB>.  The reentrancy flag is per-collection type, so
+// resolving the B array must not be blocked by the A array's reentrancy guard.
+
+public interface ICrossArrayB;
+
+[Inject]
+public class CrossB1 : ICrossArrayB;
+
+[Inject]
+public class CrossB2 : ICrossArrayB;
+
+public interface ICrossArrayA;
+
+[Inject]
+public class CrossA1 : ICrossArrayA;
+
+[Inject]
+public class CrossA2 : ICrossArrayA;
+
+/// <summary>
+/// Implementation of ICrossArrayA that depends on an array of ICrossArrayB.
+/// When the container builds IEnumerable&lt;ICrossArrayA&gt; and encounters CrossA3
+/// it must resolve IEnumerable&lt;ICrossArrayB&gt;.  This must succeed because the
+/// reentrancy guard is local to each array type.
+/// </summary>
+[Inject]
+public class CrossA3(IEnumerable<ICrossArrayB> deps) : ICrossArrayA
+{
+    public IEnumerable<ICrossArrayB> Deps { get; } = deps;
+}
+
+[Inject, Self]
+public class CrossArrayConsumer(IEnumerable<ICrossArrayA> items)
+{
+    public IEnumerable<ICrossArrayA> Items { get; } = items;
+}
+
+// ── Inheritor + Base array tests ─────────────────────────────────────────────
+// Interface whose implementations are split across the Inherited and Inheritor
+// projects, so we can verify that arrays merge correctly across container
+// hierarchies (both Base → child and Inheritor → child directions).
+
+public interface ISplitArray;
+
+[Inject]
+public class SplitBase1 : ISplitArray;
+
+[Inject]
+public class SplitBase2 : ISplitArray;
+
+[Inject, Self]
+public class SplitArrayConsumer(IEnumerable<ISplitArray> items)
+{
+    public IEnumerable<ISplitArray> Items { get; } = items;
 }

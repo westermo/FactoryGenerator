@@ -6,14 +6,16 @@
         <ProjectReference Include="..\Inherited\Inherited.csproj" />
         <CompilerVisibleProperty Include="FactoryGenerator_LogLevel" />
         <CompilerVisibleProperty Include="FactoryGenerator_FileName" />
+        <CompilerVisibleProperty Include="FactoryGenerator_EmitStaticExtensions" />
     </ItemGroup>
 
     <PropertyGroup>
-        <TargetFramework>net9.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <EmitCompilerGeneratedFiles>true</EmitCompilerGeneratedFiles>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
         <PublishAoT>true</PublishAoT>
+        <LangVersion>preview</LangVersion>
     </PropertyGroup>
 
 </Project>

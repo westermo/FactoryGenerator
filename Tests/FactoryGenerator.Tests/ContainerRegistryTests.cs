@@ -1,3 +1,4 @@
+using System.Runtime.CompilerServices;
 using FactoryGenerator;
 using Inherited;
 using Inheritor.Generated;
@@ -7,17 +8,19 @@ namespace FactoryGenerator.Tests;
 
 public class ContainerRegistryTests
 {
-    [Fact]
+    [Test]
     public void ContainerEntryPointRegistersOnModuleLoad()
     {
-        // The Inheritor assembly's ModuleInitializer should have already registered
-        // its container factory in ContainerRegistry when the assembly was loaded.
+        EnsureContainerEntryPointModuleInitialized();
+
         ContainerRegistry.RegisteredAssemblies.ShouldContain("Inheritor");
     }
 
-    [Fact]
+    [Test]
     public void ContainerEntryPointCreateBuildsWorkingContainer()
     {
+        EnsureContainerEntryPointModuleInitialized();
+
         // Create a base container
         var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
@@ -28,9 +31,11 @@ public class ContainerRegistryTests
         chained.ShouldBeAssignableTo<IContainer>();
     }
 
-    [Fact]
+    [Test]
     public void BuildChainCreatesWorkingContainerPipeline()
     {
+        EnsureContainerEntryPointModuleInitialized();
+
         // Create a base container
         var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
@@ -42,9 +47,38 @@ public class ContainerRegistryTests
         final.Resolve<ISingleton>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Test]
+    public void BuildChainWithoutAssemblyListSkipsCurrentContainerAssembly()
+    {
+        EnsureContainerEntryPointModuleInitialized();
+        var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
+
+        var final = ContainerRegistry.BuildChain(baseContainer);
+
+        ReferenceEquals(final, baseContainer).ShouldBeTrue();
+        final.Inheritor.ShouldBeNull();
+    }
+
+    [Test]
+    public void BuildChainWithExplicitAssemblyListSkipsCurrentContainerAssembly()
+    {
+        EnsureContainerEntryPointModuleInitialized();
+        var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
+
+        var final = ContainerRegistry.BuildChain(baseContainer, new[] { "Inheritor" });
+
+        ReferenceEquals(final, baseContainer).ShouldBeTrue();
+        final.Inheritor.ShouldBeNull();
+    }
+
+    [Test]
     public void ContainerEntryPointAssemblyNameIsCorrect()
     {
         ContainerEntryPoint.AssemblyName.ShouldBe("Inheritor");
+    }
+
+    private static void EnsureContainerEntryPointModuleInitialized()
+    {
+        RuntimeHelpers.RunModuleConstructor(typeof(ContainerEntryPoint).Module.ModuleHandle);
     }
 }

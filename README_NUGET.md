@@ -5,3 +5,5 @@ with [Autofac](https://autofac.org/) beyond syntax choices.
 - **Attribute-based Generation:** Simply decorate your code with attributes like ```[Inject]```,```[Singleton]```,```[Self]``` and more and your IoC container will be woven together.
 - **Test-Overridability:** Need to swap out one injection for another to test something? Simply ```[Inject]``` a replacement inside your test project for a new container.
 - **ASP.NET Core Integration:** Seamlessly integrate your source-generated container with the standard ASP.NET Core web pipeline.
+- **Static Extensions (C# 14+):** On .NET 10 and later, every registered interface gains a static ```Resolve``` method that inlines the full construction chain — no dictionary, no virtual dispatch.
+- **Plugin Architecture:** Load AOT-compiled plugin assemblies at runtime and chain their containers together without reflection.

@@ -1,4 +1,3 @@
-using System;
 using System.Collections.Generic;
 using System.Text;
 using Microsoft.CodeAnalysis;
@@ -119,7 +118,7 @@ namespace FactoryGenerator
             if (cached != null)
                 return cached;
             var value = {creation};
-            GetResolvedInstances().Add(new WeakReference<IDisposable>(value));
+            TrackResolvedInstance(value);
             {lazyName} = value;
             return value;
         }}
@@ -151,7 +150,7 @@ namespace FactoryGenerator
     internal {typeName} {name}
     {{    
         var value = {creationCall};
-        GetResolvedInstances().Add(new WeakReference<IDisposable>(value));
+        TrackResolvedInstance(value);
         return value;
     }}";
         }

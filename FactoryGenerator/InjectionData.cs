@@ -1,5 +1,4 @@
 using System;
-using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 
@@ -11,12 +10,14 @@ namespace FactoryGenerator
     {
         public string TypeFullName { get; }
         public string TypeMemberName { get; }   // MemberName(type) without "()"
-        public bool IsTestType { get; }
+        public string AssemblyName { get; }
+        public int AssemblyPriority { get; }
         public ImmutableArray<string> InterfaceFullNames { get; }
         public ImmutableArray<string> InterfaceMemberNames { get; }  // parallel to InterfaceFullNames, without "()"
         public bool Singleton { get; }
         public bool Scoped { get; }
         public bool Disposable { get; }
+        public bool AsyncDisposable { get; }
         public BooleanInjection? BooleanInjection { get; }
         public ImmutableArray<ConstructorData> Constructors { get; }
         public LambdaData? Lambda { get; }
@@ -26,20 +27,22 @@ namespace FactoryGenerator
         public string LazyFieldName => "m_" + TypeMemberName + (Lambda?.MemberName ?? string.Empty);
 
         public InjectionData(
-            string typeFullName, string typeMemberName, bool isTestType,
+            string typeFullName, string typeMemberName, string assemblyName, int assemblyPriority,
             ImmutableArray<string> interfaceFullNames, ImmutableArray<string> interfaceMemberNames,
-            bool singleton, bool scoped, bool disposable,
+            bool singleton, bool scoped, bool disposable, bool asyncDisposable,
             BooleanInjection? booleanInjection,
             ImmutableArray<ConstructorData> constructors, LambdaData? lambda)
         {
             TypeFullName = typeFullName;
             TypeMemberName = typeMemberName;
-            IsTestType = isTestType;
+            AssemblyName = assemblyName;
+            AssemblyPriority = assemblyPriority;
             InterfaceFullNames = interfaceFullNames;
             InterfaceMemberNames = interfaceMemberNames;
             Singleton = singleton;
             Scoped = scoped;
             Disposable = disposable;
+            AsyncDisposable = asyncDisposable;
             BooleanInjection = booleanInjection;
             Constructors = constructors;
             Lambda = lambda;
@@ -51,12 +54,14 @@ namespace FactoryGenerator
             if (ReferenceEquals(this, other)) return true;
             return TypeFullName == other.TypeFullName
                 && TypeMemberName == other.TypeMemberName
-                && IsTestType == other.IsTestType
+                && AssemblyName == other.AssemblyName
+                && AssemblyPriority == other.AssemblyPriority
                 && InterfaceFullNames.SequenceEqual(other.InterfaceFullNames)
                 && InterfaceMemberNames.SequenceEqual(other.InterfaceMemberNames)
                 && Singleton == other.Singleton
                 && Scoped == other.Scoped
                 && Disposable == other.Disposable
+                && AsyncDisposable == other.AsyncDisposable
                 && Equals(BooleanInjection, other.BooleanInjection)
                 && Constructors.SequenceEqual(other.Constructors)
                 && Equals(Lambda, other.Lambda);
@@ -173,32 +178,4 @@ namespace FactoryGenerator
         public override int GetHashCode() => ContainingTypeFullName.GetHashCode();
     }
 
-    public sealed class UsageData : IEquatable<UsageData>
-    {
-        public string FullName { get; }
-        public string MemberName { get; }           // SymbolUtility.MemberName(type) without "()"
-        public string ElementTypeFullName { get; }
-        public string ElementTypeMemberName { get; } // without "()"
-
-        public UsageData(string fullName, string memberName, string elementTypeFullName, string elementTypeMemberName)
-        {
-            FullName = fullName;
-            MemberName = memberName;
-            ElementTypeFullName = elementTypeFullName;
-            ElementTypeMemberName = elementTypeMemberName;
-        }
-
-        public bool Equals(UsageData? other)
-        {
-            if (other is null) return false;
-            if (ReferenceEquals(this, other)) return true;
-            return FullName == other.FullName
-                && MemberName == other.MemberName
-                && ElementTypeFullName == other.ElementTypeFullName
-                && ElementTypeMemberName == other.ElementTypeMemberName;
-        }
-
-        public override bool Equals(object? obj) => obj is UsageData other && Equals(other);
-        public override int GetHashCode() => FullName.GetHashCode();
-    }
 }

@@ -11,6 +11,8 @@ with [Autofac](https://autofac.org/) beyond syntax choices.
 
 - **Attribute-based Generation:** Simply decorate your code with attributes like ```[Inject]```,```[Singleton]```,```[Self]``` and more and your IoC container will be woven together.
 - **Test-Overridability:** Need to swap out one injection for another to test something? Simply ```[Inject]``` a replacement inside your test project for a new container.
+- **Static Extensions (C# 14+):** On .NET 10 and later, every registered interface gains a static ```Resolve``` method that inlines the full construction chain — no dictionary, no virtual dispatch.
+- **Plugin Architecture:** Load AOT-compiled plugin assemblies at runtime and chain their containers together without reflection.
 
 ## Documentation
 
@@ -101,6 +103,8 @@ public class Program
 ```
 Of note is perhaps `Generated.DependencyInjectionContainer`, this is the Compile-time created implementation of our IoC container, it implements the interface `FactoryGenerator.IContainer`.
 
+Generated containers also implement `IAsyncDisposable`. If you are working with an `ILifetimeScope` or `IContainer` reference, `await scope.DisposeAsync()` is the preferred path, but a synchronous `Dispose()` will also block until async-only services finish disposing.
+
 ### Attributes
 
 | Attribute                 |                                                                  Description                                                                          |     Requires |
@@ -114,12 +118,28 @@ Of note is perhaps `Generated.DependencyInjectionContainer`, this is the Compile
 | ```Scoped```              |      Ensures that this type will be resolved once per created scope, if you do not use IContainer.BeginLifetimeScope(), this behaves like a singleton | ```Inject``` |
 | ```Boolean(string key)``` | Creates a Runtime switch to decide whether this type should be the one that gets resolved<br/>(or the best fitting fallback option, otherwise)        | ```Inject``` |
 
+`InjectionPriority(int)` is an **assembly-level** attribute rather than an injection attribute.
+
+If every implementation of a service is guarded by `[Boolean(...)]` and no ungated fallback exists, resolving that service throws `InvalidOperationException` when none of the booleans select an implementation.
+
 ### Overriding
 
 Overriding Injections, i.e if in the graph above _Dependency C_ injected an ```ISomething``` instance and that specific implementation of ```ISomething``` will not work for anything that uses _Dependency B_, then _Dependency B_ can substitute that injection by providing it's own injection of ```ISomething```. This overriding generally follows the project dependency tree, so if _Project A_ depends on _Project B_ which depends on _Project C_, A can override both B and C, but B cannot override A.
 
 **Note**
 Overriding Injections will not work if you resolve an ```IEnumerable<ISomething>```, as that will net your a collection of all ```ISomething``` that have been injected.
+
+If you need to override the normal project-graph precedence, you can assign an assembly-level priority:
+
+```csharp
+using FactoryGenerator.Attributes;
+
+[assembly: InjectionPriority(9)]
+```
+
+Higher priority values win over lower ones, and assemblies default to priority `0`. If two assemblies have the same priority, FactoryGenerator falls back to the normal dependency graph ordering, where the current project overrides its references and direct references override deeper transitive ones. Assemblies in the same graph tier are then ordered deterministically by assembly name.
+
+This assembly-level `InjectionPriority` only affects **which implementation wins during generated service resolution** when multiple assemblies provide the same service. It does **not** control plugin/container chaining order in `ContainerRegistry`.
 
 ### Unprovided Values
 
@@ -167,6 +187,45 @@ public class Provider : IProvider
 ```
 With this code, it is now possible to do `container.Resolve<IResultType>()`, which will effectively return the result of `new Provider().Method()`, although, since `Method` is `[Inject]`ed as a `[Singleton]`, the result will be cached and the same instance will be returned at every call to `Resolve` as well as shared between all Injected implementations that require a `IResultType`.
 
+Injected method parameters follow the same rules as constructor parameters: unresolved external values are surfaced on the generated container constructor, optional parameters keep their declared defaults, and `params` collections are supplied from the container when possible.
+
+### Static Extensions (C# 14 / .NET 10+)
+
+When targeting C# 14 or later, FactoryGenerator automatically emits [static extension methods](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#extension-members) for every registered interface. This provides a dictionary-free, inline resolution path that the JIT can aggressively optimize.
+
+Instead of `container.Resolve<T>()`, you can call:
+```csharp
+var singleton = ISingleton.Resolve(container);
+var transient = IOverridable.Resolve(container);
+var chain     = ChainA.Resolve(container);
+```
+
+Each generated `Resolve` method inlines the full construction chain directly — no dictionary lookup, no factory-method indirection. Singletons use double-checked locking against the container's cache field, while transients emit a pure `new` expression.
+
+If a resolution graph depends on runtime booleans or external constructor values, the generated static method carries those inputs explicitly:
+```csharp
+var switched = ISwitchableInterface.Resolve(container, testBool: true);
+var built    = Constructed.Resolve(container, nonInjectedClassArgument: options);
+```
+
+**Null-container mode:** Passing `null` instead of a container instance bypasses the singleton/scoped cache entirely and performs a fresh allocation on every call, while still requiring any runtime inputs needed by the graph:
+```csharp
+// Fresh allocation every time — no singleton cache
+var fresh = ISingleton.Resolve(null);
+var switched = ISwitchableInterface.Resolve(testBool: true);
+```
+
+Collection dependencies (`IEnumerable<T>`, arrays, `List<T>`, `ImmutableArray<T>`, `ReadOnlySpan<T>`) are resolved through the same generated static pipeline, so the extension path and the normal container path construct equivalent object graphs. Direct `Resolve<IEnumerable<T>>()` calls are generated for every registered service type, even when no constructor or source usage referenced that collection shape ahead of time. If the current generated container has no local implementations for a collection element type, collection resolution still falls back to base containers and ASP.NET Core `IServiceProvider` sources.
+
+The static extensions are generated alongside the standard dictionary-based container and require no additional configuration. If the consuming project's language version is below C# 14, the extensions are simply not emitted.
+
+**Opting out:** If you are on C# 14+ but do not want the static extensions (for example, to reduce generated code size or avoid conflicts), set the following property in your `.csproj`:
+```xml
+<PropertyGroup>
+    <FactoryGenerator_EmitStaticExtensions>false</FactoryGenerator_EmitStaticExtensions>
+</PropertyGroup>
+```
+
 ### ASP.NET Core Integration
 For web applications, you can integrate FactoryGenerator with the standard `IServiceProvider`.
 
@@ -200,6 +259,8 @@ app.Run();
 ```
 
 This integration allows you to inject standard framework services (like `IConfiguration` or `ILogger`) into your `[Inject]`ed classes, and ensures that `[Scoped]` services are correctly disposed of at the end of each HTTP request.
+
+If a request-scoped FactoryGenerator service only implements `IAsyncDisposable`, the middleware disposes it asynchronously at the end of the request.
 
 ### Plugin / AOT Container Loading
 FactoryGenerator supports a plugin architecture where multiple assemblies each generate their own container, and these containers are chained together at runtime. This works seamlessly with AOT-compiled assemblies since no reflection is involved — discovery is entirely push-based via ```[ModuleInitializer]```.
@@ -282,6 +343,8 @@ Alternatively, plugins can be registered with a priority for automatic ordering.
 ```csharp
 ContainerRegistry.Register("MyPlugin", ContainerEntryPoint.Create, priority: 10);
 ```
+
+This `ContainerRegistry` priority is separate from `[assembly: InjectionPriority(...)]`: it only determines **where a plugin container is inserted in the runtime chain**, not which competing implementation inside a generated container wins for a service.
 
 **Note**
 This system is fully AOT-compatible. No reflection is used for container discovery — ```[ModuleInitializer]``` methods run automatically when an assembly is loaded. Each generated ```ContainerEntryPoint.Create``` directly instantiates the concrete generated container without ```Activator.CreateInstance``` or type scanning.

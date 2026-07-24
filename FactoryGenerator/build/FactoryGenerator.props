@@ -1,0 +1,11 @@
+<Project>
+
+    <PropertyGroup>
+        <FactoryGenerator_EmitStaticExtensions Condition="'$(FactoryGenerator_EmitStaticExtensions)' == ''">true</FactoryGenerator_EmitStaticExtensions>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <CompilerVisibleProperty Include="FactoryGenerator_EmitStaticExtensions" />
+    </ItemGroup>
+
+</Project>

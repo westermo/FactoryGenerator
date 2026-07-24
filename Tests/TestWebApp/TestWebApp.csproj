@@ -1,7 +1,7 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk.Web">
 
     <PropertyGroup>
-        <TargetFramework>net8.0</TargetFramework>
+        <TargetFramework>net10.0</TargetFramework>
         <ImplicitUsings>enable</ImplicitUsings>
         <Nullable>enable</Nullable>
     </PropertyGroup>
@@ -10,6 +10,7 @@
         <ProjectReference Include="..\..\FactoryGenerator.Extensions.AspNetCore\FactoryGenerator.Extensions.AspNetCore.csproj" />
         <ProjectReference Include="..\..\FactoryGenerator\FactoryGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="..\..\FactoryGenerator.Attributes\FactoryGenerator.Attributes.csproj" />
+        <CompilerVisibleProperty Include="FactoryGenerator_EmitStaticExtensions" />
     </ItemGroup>
 
 </Project>

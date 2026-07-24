@@ -1,6 +1,4 @@
-﻿using System;
-using FactoryGenerator;
-using Microsoft.AspNetCore.Builder;
+﻿using Microsoft.AspNetCore.Builder;
 
 namespace FactoryGenerator.Extensions.AspNetCore;
 
