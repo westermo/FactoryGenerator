@@ -70,6 +70,7 @@ namespace FactoryGenerator
             context.AddSource("LifetimeScope.Constructor.g.cs", source[5]);
             context.AddSource("LifetimeScope.Declarations.g.cs", source[6]);
             context.AddSource("LifetimeScope.EnumerableDeclarations.g.cs", source[7]);
+            context.AddSource("ContainerEntryPoint.g.cs", source[8]);
         }
 
         private UsageData? ResolveTransformations(GeneratorSyntaxContext context, CancellationToken token)
@@ -579,6 +580,49 @@ public sealed partial class LifetimeScope : IContainer
                                      resolvingConstructorAssignments: resolvedConstructorAssignments, addMergingConstructor: false, booleans: justBooleans);
             yield return Declarations(usingStatements, scopedDeclarations, LifetimeName);
             yield return ArrayDeclarations(usingStatements, arrayDeclarations, LifetimeName);
+
+            // Emit the static factory + module initializer for plugin container registration
+            yield return $@"
+using System;
+using System.Runtime.CompilerServices;
+using FactoryGenerator;
+
+#if !NET5_0_OR_GREATER
+namespace System.Runtime.CompilerServices
+{{
+    [AttributeUsage(AttributeTargets.Method, AllowMultiple = false)]
+    internal sealed class ModuleInitializerAttribute : Attribute {{ }}
+}}
+#endif
+
+namespace {compilation.Assembly.Name}.Generated
+{{
+    /// <summary>
+    /// Provides a static factory for the generated container and auto-registers it in the ContainerRegistry on assembly load.
+    /// </summary>
+    public static class ContainerEntryPoint
+    {{
+        /// <summary>
+        /// Creates a new DependencyInjectionContainer that chains on top of the given base container.
+        /// </summary>
+        public static IContainer Create(IContainer baseContainer)
+        {{
+            return new {ClassName}(baseContainer);
+        }}
+
+        /// <summary>
+        /// The assembly name this container was generated for.
+        /// </summary>
+        public static string AssemblyName => ""{compilation.Assembly.Name}"";
+
+        [ModuleInitializer]
+        internal static void Register()
+        {{
+            ContainerRegistry.Register(""{compilation.Assembly.Name}"", Create);
+        }}
+    }}
+}}
+";
         }
 
         private static void CheckForCycles(ImmutableArray<InjectionData> dataInjections)
