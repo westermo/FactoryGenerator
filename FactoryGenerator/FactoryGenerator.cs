@@ -36,7 +36,10 @@ namespace FactoryGenerator
             context.RegisterSourceOutput(combined, MakeAutofacModule);
 
             var supportsStaticExtensions = context.ParseOptionsProvider.Select(IsAtLeastCSharp14);
-            var extensionData = attributes.Combine(compilation).Combine(supportsStaticExtensions);
+            var emitStaticExtensions = context.AnalyzerConfigOptionsProvider.Select(GetEmitStaticExtensions);
+            var staticExtensionsEnabled = supportsStaticExtensions.Combine(emitStaticExtensions)
+                .Select(static (pair, _) => pair.Left && pair.Right);
+            var extensionData = attributes.Combine(compilation).Combine(staticExtensionsEnabled);
             context.RegisterSourceOutput(extensionData, MakeStaticExtensions);
         }
 
@@ -1085,6 +1088,13 @@ public partial class {className}
             // LanguageVersion.Preview == int.MaxValue, which is also >= 1400.
             const int CSharp14 = 1400;
             return (int)csOptions.LanguageVersion >= CSharp14;
+        }
+
+        private static bool GetEmitStaticExtensions(AnalyzerConfigOptionsProvider provider, CancellationToken _)
+        {
+            if (!provider.GlobalOptions.TryGetValue($"build_property.{nameof(FactoryGenerator)}_EmitStaticExtensions", out var value))
+                return true;
+            return !string.Equals(value, "false", StringComparison.OrdinalIgnoreCase);
         }
 
         private static void MakeStaticExtensions(

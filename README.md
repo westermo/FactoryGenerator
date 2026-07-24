@@ -188,7 +188,14 @@ Each generated `Resolve` method inlines the full construction chain directly —
 var fresh = ISingleton.Resolve(null);
 ```
 
-The static extensions are generated alongside the standard dictionary-based container and require no configuration. If the consuming project's language version is below C# 14, the extensions are simply not emitted.
+The static extensions are generated alongside the standard dictionary-based container and require no additional configuration. If the consuming project's language version is below C# 14, the extensions are simply not emitted.
+
+**Opting out:** If you are on C# 14+ but do not want the static extensions (for example, to reduce generated code size or avoid conflicts), set the following property in your `.csproj`:
+```xml
+<PropertyGroup>
+    <FactoryGenerator_EmitStaticExtensions>false</FactoryGenerator_EmitStaticExtensions>
+</PropertyGroup>
+```
 
 ### ASP.NET Core Integration
 For web applications, you can integrate FactoryGenerator with the standard `IServiceProvider`.

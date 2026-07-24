@@ -16,6 +16,7 @@
         <ProjectReference Include="..\..\FactoryGenerator.Extensions.AspNetCore\FactoryGenerator.Extensions.AspNetCore.csproj" />
         <ProjectReference Include="..\..\FactoryGenerator\FactoryGenerator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="..\..\FactoryGenerator.Attributes\FactoryGenerator.Attributes.csproj" />
+        <CompilerVisibleProperty Include="FactoryGenerator_EmitStaticExtensions" />
     </ItemGroup>
 
 </Project>
