@@ -10,6 +10,9 @@ public class ContainerRegistryTests
     [Test]
     public void ContainerEntryPointRegistersOnModuleLoad()
     {
+        // Force the Inheritor assembly to load, triggering its ModuleInitializer
+        _ = typeof(ContainerEntryPoint);
+
         // The Inheritor assembly's ModuleInitializer should have already registered
         // its container factory in ContainerRegistry when the assembly was loaded.
         ContainerRegistry.RegisteredAssemblies.ShouldContain("Inheritor");
