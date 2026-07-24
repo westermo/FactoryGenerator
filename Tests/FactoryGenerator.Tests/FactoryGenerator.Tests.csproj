@@ -11,8 +11,6 @@
     <ItemGroup>
         <PackageReference Include="TUnit" />
         <PackageReference Include="Shouldly"/>
-        <PackageReference Include="JunitXml.TestLogger"/>
-        <PackageReference Include="coverlet.collector"/>
     </ItemGroup>
 
     <ItemGroup>
