@@ -124,7 +124,7 @@ jobs:
           summary-always: true
           # Show alert with commit comment on detecting possible performance regression
           alert-threshold: '200%'
-          comment-on-alert: true
+          comment-on-alert: false
           fail-on-alert: true
 
       - name: Store generator benchmark result
@@ -136,5 +136,5 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           summary-always: true
           alert-threshold: '200%'
-          comment-on-alert: true
+          comment-on-alert: false
           fail-on-alert: true
