@@ -11,6 +11,8 @@ with [Autofac](https://autofac.org/) beyond syntax choices.
 
 - **Attribute-based Generation:** Simply decorate your code with attributes like ```[Inject]```,```[Singleton]```,```[Self]``` and more and your IoC container will be woven together.
 - **Test-Overridability:** Need to swap out one injection for another to test something? Simply ```[Inject]``` a replacement inside your test project for a new container.
+- **Static Extensions (C# 14+):** On .NET 10 and later, every registered interface gains a static ```Resolve``` method that inlines the full construction chain — no dictionary, no virtual dispatch.
+- **Plugin Architecture:** Load AOT-compiled plugin assemblies at runtime and chain their containers together without reflection.
 
 ## Documentation
 
@@ -166,6 +168,27 @@ public class Provider : IProvider
 }
 ```
 With this code, it is now possible to do `container.Resolve<IResultType>()`, which will effectively return the result of `new Provider().Method()`, although, since `Method` is `[Inject]`ed as a `[Singleton]`, the result will be cached and the same instance will be returned at every call to `Resolve` as well as shared between all Injected implementations that require a `IResultType`.
+
+### Static Extensions (C# 14 / .NET 10+)
+
+When targeting C# 14 or later, FactoryGenerator automatically emits [static extension methods](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#extension-members) for every registered interface. This provides a dictionary-free, inline resolution path that the JIT can aggressively optimize.
+
+Instead of `container.Resolve<T>()`, you can call:
+```csharp
+var singleton = ISingleton.Resolve(container);
+var transient = IOverridable.Resolve(container);
+var chain     = ChainA.Resolve(container);
+```
+
+Each generated `Resolve` method inlines the full construction chain directly — no dictionary lookup, no factory-method indirection. Singletons use double-checked locking against the container's cache field, while transients emit a pure `new` expression.
+
+**Null-container mode:** Passing `null` instead of a container instance bypasses the singleton/scoped cache entirely and performs a fresh allocation on every call. This is useful for one-off instances where you want pure construction cost without any shared state:
+```csharp
+// Fresh allocation every time — no singleton cache
+var fresh = ISingleton.Resolve(null);
+```
+
+The static extensions are generated alongside the standard dictionary-based container and require no configuration. If the consuming project's language version is below C# 14, the extensions are simply not emitted.
 
 ### ASP.NET Core Integration
 For web applications, you can integrate FactoryGenerator with the standard `IServiceProvider`.
