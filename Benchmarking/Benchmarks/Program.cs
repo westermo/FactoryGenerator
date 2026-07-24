@@ -35,7 +35,12 @@ public class ResolveBenchmarks
     public IContainer Create() => new DependencyInjectionContainer(default, default, default!);
 
     [Benchmark]
-    public IContainer CreateFromSelf() => new DependencyInjectionContainer(m_container);
+    public void CreateFromSelf()
+    {
+        // Child containers attach to their base until disposed, so each benchmark
+        // invocation must clean up or the inheritor chain grows across operations.
+        using var child = new DependencyInjectionContainer(m_container);
+    }
 
     // ── Static-extension resolution (C# 14 / .NET 10+ path) ─────────────────────
     //
