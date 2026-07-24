@@ -7,7 +7,7 @@ namespace FactoryGenerator.Tests;
 
 public class ContainerRegistryTests
 {
-    [Fact]
+    [Test]
     public void ContainerEntryPointRegistersOnModuleLoad()
     {
         // The Inheritor assembly's ModuleInitializer should have already registered
@@ -15,7 +15,7 @@ public class ContainerRegistryTests
         ContainerRegistry.RegisteredAssemblies.ShouldContain("Inheritor");
     }
 
-    [Fact]
+    [Test]
     public void ContainerEntryPointCreateBuildsWorkingContainer()
     {
         // Create a base container
@@ -28,7 +28,7 @@ public class ContainerRegistryTests
         chained.ShouldBeAssignableTo<IContainer>();
     }
 
-    [Fact]
+    [Test]
     public void BuildChainCreatesWorkingContainerPipeline()
     {
         // Create a base container
@@ -42,7 +42,7 @@ public class ContainerRegistryTests
         final.Resolve<ISingleton>().ShouldNotBeNull();
     }
 
-    [Fact]
+    [Test]
     public void ContainerEntryPointAssemblyNameIsCorrect()
     {
         ContainerEntryPoint.AssemblyName.ShouldBe("Inheritor");
