@@ -11,6 +11,9 @@ public class Overrider : IOverridable;
 public class OverridingBoolean : IOverrideBoolean;
 
 [Inject]
+public class OverrideCycleResolved : IOverrideCycle;
+
+[Inject]
 public class ChainA(ChainB B, ChainC C, ChainD D)
 {
     public ChainB B { get; } = B;
@@ -45,6 +48,13 @@ public class ChainE;
 public static class Program
 {
     public static IEnumerable<IRequestedArray> Method()
+    {
+        var container = new DependencyInjectionContainer(false, false, null!);
+        var array = container.Resolve<IEnumerable<IRequestedArray>>();
+        return array;
+    }
+
+    public static IEnumerable<IRequestedArray> MethodAgain()
     {
         var container = new DependencyInjectionContainer(false, false, null!);
         var array = container.Resolve<IEnumerable<IRequestedArray>>();

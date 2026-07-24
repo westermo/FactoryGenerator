@@ -94,8 +94,8 @@ namespace FactoryGenerator
                 interfaces = interfaces.Add(namedTypeSymbol);
             interfaces = interfaces.AddRange(attributedInterfaces);
 
-            var isDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.Name.Equals("IDisposable"));
-            var disposableIface = interfaces.FirstOrDefault(i => i.Name.Contains("IDisposable"));
+            var isDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.SpecialType == SpecialType.System_IDisposable);
+            var disposableIface = interfaces.FirstOrDefault(i => i.SpecialType == SpecialType.System_IDisposable);
             if (disposableIface is not null)
                 interfaces = interfaces.Remove(disposableIface);
 

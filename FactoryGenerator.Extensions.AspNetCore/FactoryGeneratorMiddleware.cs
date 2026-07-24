@@ -16,8 +16,11 @@ internal sealed class FactoryGeneratorMiddleware
 
     public async Task Invoke(HttpContext context)
     {
-        var scope = _container.BeginLifetimeScope();
         var originalProvider = context.RequestServices;
+        var requestContainer = new ServiceProviderAdapter(originalProvider, baseContainer: _container);
+        var scope = _container is IContainerScopeFactory scopeFactory
+            ? scopeFactory.BeginLifetimeScope(requestContainer)
+            : _container.BeginLifetimeScope();
         context.RequestServices = new FactoryGeneratorServiceProvider(originalProvider, scope);
 
         try

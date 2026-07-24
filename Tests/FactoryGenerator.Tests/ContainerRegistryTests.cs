@@ -46,6 +46,30 @@ public class ContainerRegistryTests
     }
 
     [Test]
+    public void BuildChainWithoutAssemblyListSkipsCurrentContainerAssembly()
+    {
+        _ = typeof(ContainerEntryPoint);
+        var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
+
+        var final = ContainerRegistry.BuildChain(baseContainer);
+
+        ReferenceEquals(final, baseContainer).ShouldBeTrue();
+        final.Inheritor.ShouldBeNull();
+    }
+
+    [Test]
+    public void BuildChainWithExplicitAssemblyListSkipsCurrentContainerAssembly()
+    {
+        _ = typeof(ContainerEntryPoint);
+        var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
+
+        var final = ContainerRegistry.BuildChain(baseContainer, new[] { "Inheritor" });
+
+        ReferenceEquals(final, baseContainer).ShouldBeTrue();
+        final.Inheritor.ShouldBeNull();
+    }
+
+    [Test]
     public void ContainerEntryPointAssemblyNameIsCorrect()
     {
         ContainerEntryPoint.AssemblyName.ShouldBe("Inheritor");

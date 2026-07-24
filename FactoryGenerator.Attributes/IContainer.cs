@@ -25,3 +25,18 @@ public interface IContainer : ILifetimeScope
     IContainer? Base { get; }
     IContainer? Inheritor { get; set; }
 }
+
+public interface IContainerScopeFactory
+{
+    ILifetimeScope BeginLifetimeScope(IContainer? baseContainer);
+}
+
+public interface IContainerRegistrationMetadata
+{
+    string AssemblyName { get; }
+}
+
+public interface IContainerCacheInvalidator
+{
+    void InvalidateCollectionCaches();
+}

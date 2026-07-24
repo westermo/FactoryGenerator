@@ -172,32 +172,4 @@ namespace FactoryGenerator
         public override int GetHashCode() => ContainingTypeFullName.GetHashCode();
     }
 
-    public sealed class UsageData : IEquatable<UsageData>
-    {
-        public string FullName { get; }
-        public string MemberName { get; }           // SymbolUtility.MemberName(type) without "()"
-        public string ElementTypeFullName { get; }
-        public string ElementTypeMemberName { get; } // without "()"
-
-        public UsageData(string fullName, string memberName, string elementTypeFullName, string elementTypeMemberName)
-        {
-            FullName = fullName;
-            MemberName = memberName;
-            ElementTypeFullName = elementTypeFullName;
-            ElementTypeMemberName = elementTypeMemberName;
-        }
-
-        public bool Equals(UsageData? other)
-        {
-            if (other is null) return false;
-            if (ReferenceEquals(this, other)) return true;
-            return FullName == other.FullName
-                && MemberName == other.MemberName
-                && ElementTypeFullName == other.ElementTypeFullName
-                && ElementTypeMemberName == other.ElementTypeMemberName;
-        }
-
-        public override bool Equals(object? obj) => obj is UsageData other && Equals(other);
-        public override int GetHashCode() => FullName.GetHashCode();
-    }
 }

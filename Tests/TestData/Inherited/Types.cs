@@ -7,11 +7,19 @@ public interface IType;
 
 public interface IOverridable;
 
+public interface IOverrideCycle;
+
 [Inject]
 public class Type : IType;
 
 [Inject]
 public class Overriden : IOverridable;
+
+[Inject]
+public class OverrideCycleBase(IOverrideCycle self) : IOverrideCycle
+{
+    public IOverrideCycle Self { get; } = self;
+}
 
 public interface ISingleton;
 
@@ -43,7 +51,48 @@ public class Constructed(NonInjectedClass nonInjectedClassArgument, ISingleton i
     public ISingleton InjectedArgument { get; } = injectedArgument;
 }
 
+[Inject, Self]
+public class ConstructedConsumer(Constructed value)
+{
+    public Constructed Value { get; } = value;
+}
+
+[Inject, Self]
+public class ConstructedArrayConsumer(IEnumerable<Constructed> items)
+{
+    public IEnumerable<Constructed> Items { get; } = items;
+}
+
+[Inject, Self]
+public class BooleanConsumer(ISwitchableInterface value)
+{
+    public ISwitchableInterface Value { get; } = value;
+}
+
+[Inject, Self]
+public class SwitchableArrayConsumer(IEnumerable<ISwitchableInterface> items)
+{
+    public IEnumerable<ISwitchableInterface> Items { get; } = items;
+}
+
 public interface IMethodResult;
+
+public interface IMultiConstructorCycle;
+
+public class ExternalOnlyDependency;
+
+[Inject]
+public class MultiConstructorCycle : IMultiConstructorCycle
+{
+    public MultiConstructorCycle()
+    {
+    }
+
+    public MultiConstructorCycle(IMultiConstructorCycle self, ExternalOnlyDependency externalOnlyDependency)
+        : this()
+    {
+    }
+}
 
 public class MethodResult : IMethodResult;
 
@@ -112,7 +161,28 @@ public class RequestedArray2 : IRequestedArray;
 [Inject]
 public class RequestedArray3 : IRequestedArray;
 
+public interface IUnrequestedEnumerable;
+
+[Inject]
+public class UnrequestedEnumerable1 : IUnrequestedEnumerable;
+
+[Inject]
+public class UnrequestedEnumerable2 : IUnrequestedEnumerable;
+
 public interface IDisposer;
+
+public interface INotIDisposable;
+
+[Inject]
+public class NotDisposableNameMatch : INotIDisposable;
+
+public class CustomDisposableTypes
+{
+    public interface IDisposable;
+
+    [Inject]
+    public class CustomDisposable : IDisposable;
+}
 
 [Inject]
 public class DisposableNonSingleton : IDisposer, IDisposable

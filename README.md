@@ -182,11 +182,20 @@ var chain     = ChainA.Resolve(container);
 
 Each generated `Resolve` method inlines the full construction chain directly — no dictionary lookup, no factory-method indirection. Singletons use double-checked locking against the container's cache field, while transients emit a pure `new` expression.
 
-**Null-container mode:** Passing `null` instead of a container instance bypasses the singleton/scoped cache entirely and performs a fresh allocation on every call. This is useful for one-off instances where you want pure construction cost without any shared state:
+If a resolution graph depends on runtime booleans or external constructor values, the generated static method carries those inputs explicitly:
+```csharp
+var switched = ISwitchableInterface.Resolve(container, testBool: true);
+var built    = Constructed.Resolve(container, nonInjectedClassArgument: options);
+```
+
+**Null-container mode:** Passing `null` instead of a container instance bypasses the singleton/scoped cache entirely and performs a fresh allocation on every call, while still requiring any runtime inputs needed by the graph:
 ```csharp
 // Fresh allocation every time — no singleton cache
 var fresh = ISingleton.Resolve(null);
+var switched = ISwitchableInterface.Resolve(testBool: true);
 ```
+
+Collection dependencies (`IEnumerable<T>`, arrays, `List<T>`, `ImmutableArray<T>`, `ReadOnlySpan<T>`) are resolved through the same generated static pipeline, so the extension path and the normal container path construct equivalent object graphs. Direct `Resolve<IEnumerable<T>>()` calls are generated for every registered service type, even when no constructor or source usage referenced that collection shape ahead of time.
 
 The static extensions are generated alongside the standard dictionary-based container and require no additional configuration. If the consuming project's language version is below C# 14, the extensions are simply not emitted.
 
