@@ -10,9 +10,12 @@
 
   <ItemGroup>
     <PackageReference Include="BenchmarkDotNet" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp" />
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\FactoryGenerator.Attributes\FactoryGenerator.Attributes.csproj" />
+    <ProjectReference Include="..\..\FactoryGenerator\FactoryGenerator.csproj" />
     <ProjectReference Include="..\..\Tests\TestData\Inheritor\Inheritor.csproj" />
   </ItemGroup>
 

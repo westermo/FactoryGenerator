@@ -69,5 +69,5 @@ public class ResolveBenchmarks
 internal static class Program
 {
     private static void Main(string[] args) =>
-        BenchmarkRunner.Run<ResolveBenchmarks>();
+        BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly).Run(args);
 }
