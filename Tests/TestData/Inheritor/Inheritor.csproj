@@ -6,6 +6,7 @@
         <ProjectReference Include="..\Inherited\Inherited.csproj" />
         <CompilerVisibleProperty Include="FactoryGenerator_LogLevel" />
         <CompilerVisibleProperty Include="FactoryGenerator_FileName" />
+        <CompilerVisibleProperty Include="FactoryGenerator_EmitStaticExtensions" />
     </ItemGroup>
 
     <PropertyGroup>
