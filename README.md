@@ -200,3 +200,88 @@ app.Run();
 ```
 
 This integration allows you to inject standard framework services (like `IConfiguration` or `ILogger`) into your `[Inject]`ed classes, and ensures that `[Scoped]` services are correctly disposed of at the end of each HTTP request.
+
+### Plugin / AOT Container Loading
+FactoryGenerator supports a plugin architecture where multiple assemblies each generate their own container, and these containers are chained together at runtime. This works seamlessly with AOT-compiled assemblies since no reflection is involved — discovery is entirely push-based via ```[ModuleInitializer]```.
+
+Every assembly that uses the FactoryGenerator source generator automatically gets a ```ContainerEntryPoint``` class with a ```[ModuleInitializer]```. When the assembly is loaded (via ```Assembly.LoadFrom```, or simply by being referenced), its module initializer fires and registers a container factory in the global ```ContainerRegistry```. The chaining model looks like this:
+
+```
+BaseContainer → Plugin1Container(base) → Plugin2Container(plugin1) → ... → FinalContainer
+```
+
+Each plugin container wraps the previous one. Resolution walks up the chain, so a plugin can override types from the base, and the final (outermost) container sees everything.
+
+Consider a host application with two plugin assemblies:
+
+```mermaid
+  graph TD;
+      Host-->PluginA;
+      Host-->PluginB;
+      PluginA-->SharedLib;
+      PluginB-->SharedLib;
+```
+
+Here, _SharedLib_ references **FactoryGenerator.Attributes** and defines shared interfaces, while _PluginA_ and _PluginB_ each reference **FactoryGenerator** (the source generator) and provide their own ```[Inject]```ed implementations. The _Host_ creates the base container and loads the plugins.
+
+A plugin assembly needs nothing special beyond the usual ```[Inject]``` attribute:
+```csharp
+using FactoryGenerator.Attributes;
+using SharedLib;
+
+namespace PluginA;
+[Inject]
+public class PluginAService : IPluginService
+{
+  public string Name => "Plugin A";
+}
+```
+The source generator handles the rest. A ```ContainerEntryPoint``` with a ```[ModuleInitializer]``` is emitted automatically, registering _PluginA_'s container factory on assembly load.
+
+In the host application, loading plugins and building the chain looks like this:
+```csharp
+using System.Reflection;
+using FactoryGenerator;
+
+namespace Host;
+public class Program
+{
+  public static void Main(string[] args)
+  {
+    //Create the base container from the host assembly.
+    var baseContainer = new Host.Generated.DependencyInjectionContainer();
+
+    //Load plugin assemblies — their ModuleInitializers register factories automatically.
+    Assembly.LoadFrom("plugins/PluginA.dll");
+    Assembly.LoadFrom("plugins/PluginB.dll");
+
+    //Build the chained container (ordered by registration priority, then load order).
+    var container = ContainerRegistry.BuildChain(baseContainer);
+
+    //Resolve from the final container — sees all host + plugin registrations.
+    var services = container.Resolve<IEnumerable<IPluginService>>();
+    foreach (var service in services)
+    {
+      Console.WriteLine(service.Name);
+    }
+  }
+}
+```
+
+If you need precise control over which plugins are chained and in what order, you can pass an explicit list of assembly names:
+```csharp
+var container = ContainerRegistry.BuildChain(baseContainer, new[]
+{
+  "PluginA",
+  "PluginB"
+});
+```
+Plugins are chained in the specified order. An ```InvalidOperationException``` is thrown if a named assembly hasn't been loaded yet.
+
+Alternatively, plugins can be registered with a priority for automatic ordering. Lower priority values are applied first (closer to the base):
+```csharp
+ContainerRegistry.Register("MyPlugin", ContainerEntryPoint.Create, priority: 10);
+```
+
+**Note**
+This system is fully AOT-compatible. No reflection is used for container discovery — ```[ModuleInitializer]``` methods run automatically when an assembly is loaded. Each generated ```ContainerEntryPoint.Create``` directly instantiates the concrete generated container without ```Activator.CreateInstance``` or type scanning.
