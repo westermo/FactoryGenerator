@@ -41,6 +41,9 @@ namespace FactoryGenerator
             }
 
             if (namedTypeSymbol is null) return null;
+            var assembly = symbol.ContainingAssembly ?? namedTypeSymbol.ContainingAssembly;
+            var assemblyName = assembly?.Name ?? string.Empty;
+            var assemblyPriority = GetAssemblyPriority(assembly);
 
             var singleInstance = false;
             var acquireChildInterfaces = false;
@@ -121,7 +124,8 @@ namespace FactoryGenerator
             return new InjectionData(
                 typeFullName: namedTypeSymbol.ToString()!,
                 typeMemberName: typeMemberName,
-                isTestType: namedTypeSymbol.ToString()!.Contains("Test"),
+                assemblyName: assemblyName,
+                assemblyPriority: assemblyPriority,
                 interfaceFullNames: ifaceFullNames,
                 interfaceMemberNames: ifaceMemberNames,
                 singleton: singleInstance,
@@ -167,6 +171,24 @@ namespace FactoryGenerator
             if (attributeData.ConstructorArguments[0].Value is string key)
                 return new BooleanInjection(true, key);
             return null;
+        }
+
+        private static int GetAssemblyPriority(IAssemblySymbol? assemblySymbol)
+        {
+            if (assemblySymbol is null)
+                return 0;
+
+            foreach (var attributeData in assemblySymbol.GetAttributes())
+            {
+                if (attributeData.AttributeClass?.ToString() != "FactoryGenerator.Attributes.InjectionPriorityAttribute")
+                    continue;
+
+                if (attributeData.ConstructorArguments.Length == 1
+                    && attributeData.ConstructorArguments[0].Value is int priority)
+                    return priority;
+            }
+
+            return 0;
         }
     }
 }

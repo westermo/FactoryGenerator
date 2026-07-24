@@ -94,7 +94,65 @@ public class FallbackService : IService
         generatedSource.ShouldContain("Resolve(DependencyInjectionContainer? container, bool boolean_feature_flag)");
     }
 
-    private static CSharpCompilation CreateCompilation(string source)
+    [Test]
+    public void AssemblyPriorityCanOverrideProjectGraphPrecedence()
+    {
+        var baseAssemblyName = "PriorityBase" + Guid.NewGuid().ToString("N");
+        var derivedAssemblyName = "PriorityDerived" + Guid.NewGuid().ToString("N");
+
+        var baseSource = $$"""
+using FactoryGenerator.Attributes;
+
+[assembly: InjectionPriority(9)]
+
+namespace {{baseAssemblyName}}
+{
+public interface IService
+{
+}
+
+[Inject]
+public class BaseService : IService
+{
+}
+}
+""";
+
+        var derivedSource = $$"""
+using FactoryGenerator.Attributes;
+using {{baseAssemblyName}};
+
+namespace {{derivedAssemblyName}}
+{
+[Inject]
+public class DerivedService : IService
+{
+}
+}
+""";
+
+        var baseCompilation = CreateCompilation(baseAssemblyName, baseSource);
+var (baseReference, _) = EmitReference(baseCompilation);
+        var derivedCompilation = CreateCompilation(derivedAssemblyName, derivedSource, baseReference);
+
+        var (runResult, outputCompilation) = RunGenerator(derivedCompilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray()
+            .ShouldBeEmpty();
+
+        var serviceMemberName = baseAssemblyName + "_IService()";
+        var prioritizedImplementationMemberName = baseAssemblyName + "_BaseService()";
+        var nonPrioritizedImplementationMemberName = derivedAssemblyName + "_DerivedService()";
+        var generatedSource = string.Join(Environment.NewLine, generatorResult.GeneratedSources.Select(sourceResult => sourceResult.SourceText.ToString()));
+        generatedSource.ShouldContain($"internal {baseAssemblyName}.IService {serviceMemberName} => {prioritizedImplementationMemberName};");
+        generatedSource.ShouldNotContain($"internal {baseAssemblyName}.IService {serviceMemberName} => {nonPrioritizedImplementationMemberName};");
+    }
+
+    private static CSharpCompilation CreateCompilation(string assemblyName, string source, params MetadataReference[] additionalReferences)
     {
         var syntaxTree = CSharpSyntaxTree.ParseText(source, new CSharpParseOptions(LanguageVersion.Preview));
         var excludedAssemblies = new[]
@@ -116,12 +174,18 @@ public class FallbackService : IService
             .ToList();
 
         references.Add(MetadataReference.CreateFromFile(typeof(InjectAttribute).Assembly.Location));
+        references.AddRange(additionalReferences);
 
         return CSharpCompilation.Create(
-            assemblyName: "GeneratorBehaviorTests",
+            assemblyName: assemblyName,
             syntaxTrees: new[] { syntaxTree },
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
+    }
+
+    private static CSharpCompilation CreateCompilation(string source)
+    {
+        return CreateCompilation("GeneratorBehaviorTests", source);
     }
 
     private static (GeneratorDriverRunResult RunResult, Compilation OutputCompilation) RunGenerator(CSharpCompilation compilation)
@@ -132,5 +196,19 @@ public class FallbackService : IService
             parseOptions: parseOptions);
         driver = driver.RunGeneratorsAndUpdateCompilation(compilation, out var outputCompilation, out _);
         return (driver.GetRunResult(), outputCompilation);
+    }
+
+    private static (MetadataReference Reference, byte[] Image) EmitReference(CSharpCompilation compilation)
+    {
+        var image = EmitAssembly(compilation);
+        return (MetadataReference.CreateFromImage(image), image);
+    }
+
+    private static byte[] EmitAssembly(CSharpCompilation compilation)
+    {
+        using var stream = new MemoryStream();
+        var result = compilation.Emit(stream);
+        result.Success.ShouldBeTrue(string.Join(Environment.NewLine, result.Diagnostics));
+        return stream.ToArray();
     }
 }

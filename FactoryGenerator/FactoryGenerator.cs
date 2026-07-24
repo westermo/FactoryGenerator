@@ -128,7 +128,7 @@ namespace FactoryGenerator
         private static IEnumerable<string> GenerateCode(ImmutableArray<InjectionData> dataInjections,
                                                         Compilation compilation, ILogger log)
         {
-            CheckForCycles(dataInjections);
+            CheckForCycles(dataInjections, compilation);
             log.Log(LogLevel.Debug, "Starting Code Generation");
             var usingStatements = $@"
 using System;
@@ -316,7 +316,7 @@ public sealed partial class {ClassName} : IContainer, IContainerScopeFactory, IC
 
             var booleanKeys = dataInjections.Select(inj => inj.BooleanInjection).Where(b => b is not null)
                                             .Select(b => b!.Key).Distinct().ToArray();
-            var ordered = OrderInjections(dataInjections, log);
+            var ordered = OrderInjections(dataInjections, compilation, log);
             var (interfaceInjectors, interfaceMemberNames) = BuildInterfaceInjectors(ordered);
 
             var declarations = new Dictionary<string, string>();
@@ -739,19 +739,67 @@ namespace {compilation.Assembly.Name}.Generated
 ";
         }
 
-        private static List<InjectionData> OrderInjections(ImmutableArray<InjectionData> dataInjections, ILogger? log = null)
+        private static List<InjectionData> OrderInjections(ImmutableArray<InjectionData> dataInjections, Compilation compilation, ILogger? log = null)
         {
             var ordered = dataInjections.Reverse().ToList();
+            var assemblyDistances = BuildAssemblyDistances(compilation, ordered.Select(injection => injection.AssemblyName));
 
-            foreach (var injection in ordered.ToArray())
+            foreach (var injection in ordered)
+                log?.Log(LogLevel.Debug, $"Traversing {injection.Name} from {injection.AssemblyName} with priority {injection.AssemblyPriority}");
+
+            return ordered
+                .OrderBy(injection => injection.AssemblyPriority)
+                .ThenByDescending(injection => GetAssemblyDistance(assemblyDistances, injection.AssemblyName))
+                .ThenBy(injection => injection.AssemblyName, StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private static Dictionary<string, int> BuildAssemblyDistances(Compilation compilation, IEnumerable<string> assemblyNames)
+        {
+            var relevantAssemblyNames = new HashSet<string>(assemblyNames, StringComparer.Ordinal);
+            var distances = new Dictionary<string, int>(StringComparer.Ordinal);
+            var visited = new HashSet<IAssemblySymbol>(SymbolEqualityComparer.Default);
+            var queue = new Queue<(IAssemblySymbol Assembly, int Distance)>();
+
+            visited.Add(compilation.Assembly);
+            queue.Enqueue((compilation.Assembly, 0));
+
+            while (queue.Count > 0 && distances.Count < relevantAssemblyNames.Count)
             {
-                log?.Log(LogLevel.Debug, $"Traversing {injection.Name}");
-                if (!injection.IsTestType) continue;
-                ordered.Remove(injection);
-                ordered.Add(injection);
+                var current = queue.Dequeue();
+                if (relevantAssemblyNames.Contains(current.Assembly.Name)
+                    && (!distances.TryGetValue(current.Assembly.Name, out var existingDistance)
+                        || current.Distance < existingDistance))
+                {
+                    distances[current.Assembly.Name] = current.Distance;
+                }
+
+                foreach (var referencedAssembly in GetReferencedAssemblies(current.Assembly))
+                {
+                    if (!visited.Add(referencedAssembly))
+                        continue;
+
+                    queue.Enqueue((referencedAssembly, current.Distance + 1));
+                }
             }
 
-            return ordered;
+            return distances;
+        }
+
+        private static IEnumerable<IAssemblySymbol> GetReferencedAssemblies(IAssemblySymbol assembly)
+        {
+            foreach (var module in assembly.Modules)
+            {
+                foreach (var referencedAssembly in module.ReferencedAssemblySymbols)
+                    yield return referencedAssembly;
+            }
+        }
+
+        private static int GetAssemblyDistance(IReadOnlyDictionary<string, int> assemblyDistances, string assemblyName)
+        {
+            return assemblyDistances.TryGetValue(assemblyName, out var distance)
+                ? distance
+                : int.MaxValue;
         }
 
         private static (Dictionary<string, List<InjectionData>> InterfaceInjectors, Dictionary<string, string> InterfaceMemberNames) BuildInterfaceInjectors(IEnumerable<InjectionData> ordered)
@@ -933,9 +981,9 @@ namespace {compilation.Assembly.Name}.Generated
             return SyntaxFacts.IsValidIdentifier(candidate) ? candidate : prefix.TrimEnd('_');
         }
 
-        private static void CheckForCycles(ImmutableArray<InjectionData> dataInjections)
+        private static void CheckForCycles(ImmutableArray<InjectionData> dataInjections, Compilation compilation)
         {
-            var ordered = OrderInjections(dataInjections);
+            var ordered = OrderInjections(dataInjections, compilation);
             var (interfaceInjectors, _) = BuildInterfaceInjectors(ordered);
             var availableInterfaceFullNames = interfaceInjectors.Keys.ToImmutableArray();
 
@@ -1429,7 +1477,7 @@ public partial class {className}
         private static string GenerateStaticExtensions(
             ImmutableArray<InjectionData> dataInjections, Compilation compilation)
         {
-            var ordered = OrderInjections(dataInjections);
+            var ordered = OrderInjections(dataInjections, compilation);
             var (interfaceInjectors, interfaceMemberNames) = BuildInterfaceInjectors(ordered);
             var availableInterfaces = interfaceInjectors.Keys.ToImmutableArray();
             var specs = BuildStaticExtensionSpecs(interfaceInjectors, interfaceMemberNames, availableInterfaces);

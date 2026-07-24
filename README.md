@@ -116,12 +116,26 @@ Of note is perhaps `Generated.DependencyInjectionContainer`, this is the Compile
 | ```Scoped```              |      Ensures that this type will be resolved once per created scope, if you do not use IContainer.BeginLifetimeScope(), this behaves like a singleton | ```Inject``` |
 | ```Boolean(string key)``` | Creates a Runtime switch to decide whether this type should be the one that gets resolved<br/>(or the best fitting fallback option, otherwise)        | ```Inject``` |
 
+`InjectionPriority(int)` is an **assembly-level** attribute rather than an injection attribute.
+
 ### Overriding
 
 Overriding Injections, i.e if in the graph above _Dependency C_ injected an ```ISomething``` instance and that specific implementation of ```ISomething``` will not work for anything that uses _Dependency B_, then _Dependency B_ can substitute that injection by providing it's own injection of ```ISomething```. This overriding generally follows the project dependency tree, so if _Project A_ depends on _Project B_ which depends on _Project C_, A can override both B and C, but B cannot override A.
 
 **Note**
 Overriding Injections will not work if you resolve an ```IEnumerable<ISomething>```, as that will net your a collection of all ```ISomething``` that have been injected.
+
+If you need to override the normal project-graph precedence, you can assign an assembly-level priority:
+
+```csharp
+using FactoryGenerator.Attributes;
+
+[assembly: InjectionPriority(9)]
+```
+
+Higher priority values win over lower ones, and assemblies default to priority `0`. If two assemblies have the same priority, FactoryGenerator falls back to the normal dependency graph ordering, where the current project overrides its references and direct references override deeper transitive ones. Assemblies in the same graph tier are then ordered deterministically by assembly name.
+
+This assembly-level `InjectionPriority` only affects **which implementation wins during generated service resolution** when multiple assemblies provide the same service. It does **not** control plugin/container chaining order in `ContainerRegistry`.
 
 ### Unprovided Values
 
@@ -321,6 +335,8 @@ Alternatively, plugins can be registered with a priority for automatic ordering.
 ```csharp
 ContainerRegistry.Register("MyPlugin", ContainerEntryPoint.Create, priority: 10);
 ```
+
+This `ContainerRegistry` priority is separate from `[assembly: InjectionPriority(...)]`: it only determines **where a plugin container is inserted in the runtime chain**, not which competing implementation inside a generated container wins for a service.
 
 **Note**
 This system is fully AOT-compatible. No reflection is used for container discovery — ```[ModuleInitializer]``` methods run automatically when an assembly is loaded. Each generated ```ContainerEntryPoint.Create``` directly instantiates the concrete generated container without ```Activator.CreateInstance``` or type scanning.

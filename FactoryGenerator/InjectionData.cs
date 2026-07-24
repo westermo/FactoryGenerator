@@ -10,7 +10,8 @@ namespace FactoryGenerator
     {
         public string TypeFullName { get; }
         public string TypeMemberName { get; }   // MemberName(type) without "()"
-        public bool IsTestType { get; }
+        public string AssemblyName { get; }
+        public int AssemblyPriority { get; }
         public ImmutableArray<string> InterfaceFullNames { get; }
         public ImmutableArray<string> InterfaceMemberNames { get; }  // parallel to InterfaceFullNames, without "()"
         public bool Singleton { get; }
@@ -25,7 +26,7 @@ namespace FactoryGenerator
         public string LazyFieldName => "m_" + TypeMemberName + (Lambda?.MemberName ?? string.Empty);
 
         public InjectionData(
-            string typeFullName, string typeMemberName, bool isTestType,
+            string typeFullName, string typeMemberName, string assemblyName, int assemblyPriority,
             ImmutableArray<string> interfaceFullNames, ImmutableArray<string> interfaceMemberNames,
             bool singleton, bool scoped, bool disposable,
             BooleanInjection? booleanInjection,
@@ -33,7 +34,8 @@ namespace FactoryGenerator
         {
             TypeFullName = typeFullName;
             TypeMemberName = typeMemberName;
-            IsTestType = isTestType;
+            AssemblyName = assemblyName;
+            AssemblyPriority = assemblyPriority;
             InterfaceFullNames = interfaceFullNames;
             InterfaceMemberNames = interfaceMemberNames;
             Singleton = singleton;
@@ -50,7 +52,8 @@ namespace FactoryGenerator
             if (ReferenceEquals(this, other)) return true;
             return TypeFullName == other.TypeFullName
                 && TypeMemberName == other.TypeMemberName
-                && IsTestType == other.IsTestType
+                && AssemblyName == other.AssemblyName
+                && AssemblyPriority == other.AssemblyPriority
                 && InterfaceFullNames.SequenceEqual(other.InterfaceFullNames)
                 && InterfaceMemberNames.SequenceEqual(other.InterfaceMemberNames)
                 && Singleton == other.Singleton
