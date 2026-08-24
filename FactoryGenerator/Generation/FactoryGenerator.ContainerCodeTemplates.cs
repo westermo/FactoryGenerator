@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 using System.Collections.Immutable;
 using System.Linq;
 using System.Text;
@@ -577,12 +578,12 @@ public partial class {ClassName}
         private static void ArrayDeclarations(string usingStatements, Dictionary<string, string> arrayDeclarations, string className, SourceProductionContext context)
         {
             var cacheInvalidations = string.Join("\n        ", arrayDeclarations.Keys.Select(name => $"m_{name} = null;"));
-            foreach (var declaration in arrayDeclarations)
+            foreach (var group in GroupByHintName(arrayDeclarations))
             {
-                context.AddSource($"FactoryGenerator.Collection.Declarations/{declaration.Key}.g.cs", $@"{usingStatements}
+                context.AddSource($"FactoryGenerator.Collection.Declarations/{group.HintName}.g.cs", $@"{usingStatements}
 public partial class {className}
 {{
-    {declaration.Value}
+    {string.Join("\n    ", group.Values)}
 }}");
             }
 
@@ -598,17 +599,54 @@ public partial class {className}
 
         private static void Declarations(string usingStatements, Dictionary<string, string> declarations, string className, SourceProductionContext context)
         {
-            foreach (var declaration in declarations)
+            foreach (var group in GroupByHintName(declarations))
             {
-                context.AddSource($"FactoryGenerator.Declarations/{declaration.Key}.g.cs",
+                context.AddSource($"FactoryGenerator.Declarations/{group.HintName}.g.cs",
                                   $$"""
                                     {{usingStatements}}
                                     public partial class {{className}}
                                     {
-                                        {{declaration.Value}}
+                                        {{string.Join("\n    ", group.Values)}}
                                     };
                                     """);
             }
+        }
+
+        /// <summary>
+        /// Groups declaration-dictionary entries by a hint name Roslyn would treat as identical.
+        /// <c>SourceProductionContext.AddSource</c> compares hint names with
+        /// <see cref="StringComparer.OrdinalIgnoreCase"/> (matching how the names typically also map
+        /// to files on a case-insensitive file system), but the dictionaries this feeds are keyed
+        /// with the default (ordinal, case-SENSITIVE) comparer — because the keys are also valid,
+        /// distinct C# member/field names, and C# identifiers genuinely are case-sensitive (e.g. two
+        /// different injections independently choosing external "IContainer"-typed constructor
+        /// parameters named "lifeTimeScope" and "lifetimeScope" are both completely valid, unrelated
+        /// C# programs on their own). Naively emitting one hint name per dictionary key would crash
+        /// the entire generator with "hintName ... must be unique within a generator" as soon as two
+        /// such keys collided only by case. Since a partial class's members can be split across any
+        /// number of source files (or consolidated into one) with zero effect on the compiled
+        /// result, the fix is to detect that case-only collision here and merge the colliding
+        /// declarations into a single generated file/hint name — preserving every declaration
+        /// instead of losing one to a silent dictionary overwrite or crashing outright.
+        /// </summary>
+        private static List<(string HintName, List<string> Values)> GroupByHintName(Dictionary<string, string> declarations)
+        {
+            var indexByHintName = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
+            var groups = new List<(string HintName, List<string> Values)>();
+            foreach (var declaration in declarations)
+            {
+                if (indexByHintName.TryGetValue(declaration.Key, out var index))
+                {
+                    groups[index].Values.Add(declaration.Value);
+                }
+                else
+                {
+                    indexByHintName[declaration.Key] = groups.Count;
+                    groups.Add((declaration.Key, new List<string> {declaration.Value}));
+                }
+            }
+
+            return groups;
         }
 
         private static void MakeArray(Dictionary<string, string> declarations, string name,

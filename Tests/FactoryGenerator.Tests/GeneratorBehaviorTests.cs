@@ -145,6 +145,65 @@ public class GeneratorBehaviorTests
     }
 
     [Test]
+    public void GeneratorSupportsExternalParameterNamesDifferingOnlyByCase()
+    {
+        // Real-world reproduction: two unrelated injections each take an IContainer-typed external
+        // constructor parameter whose names differ ONLY by case ("lifeTimeScope" vs "lifetimeScope").
+        // Roslyn's SourceProductionContext.AddSource compares hint names with
+        // StringComparer.OrdinalIgnoreCase, but GenerateCode's `declarations` dictionary used the
+        // default (ordinal, case-SENSITIVE) comparer — so both names survived as separate dictionary
+        // entries (correctly, since they're both valid, distinct C# identifiers) but then crashed
+        // the whole generator with "hintName ... must be unique within a generator" as soon as BOTH
+        // tried to become separate generated files. Pins down the fix: colliding declarations must
+        // be merged into a single generated file instead.
+        const string source = """
+                              using FactoryGenerator;
+                              using FactoryGenerator.Attributes;
+
+                              namespace Sample
+                              {
+                              public interface IServiceA
+                              {
+                              }
+
+                              public interface IServiceB
+                              {
+                              }
+
+                              [Inject]
+                              public class ServiceA : IServiceA
+                              {
+                                  public ServiceA(IContainer lifeTimeScope)
+                                  {
+                                  }
+                              }
+
+                              [Inject]
+                              public class ServiceB : IServiceB
+                              {
+                                  public ServiceB(IContainer lifetimeScope)
+                                  {
+                                  }
+                              }
+                              }
+                              """;
+
+        var compilation = CreateCompilation(source);
+        var (runResult, outputCompilation) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
+
+        var generatedSource = string.Join(Environment.NewLine, generatorResult.GeneratedSources.Select(sourceResult => sourceResult.SourceText.ToString()));
+        generatedSource.ShouldContain("IContainer lifeTimeScope => this;");
+        generatedSource.ShouldContain("IContainer lifetimeScope => this;");
+    }
+
+    [Test]
     public void GeneratorSupportsBooleanKeysThatAreNotIdentifiers()
     {
         const string source = """
