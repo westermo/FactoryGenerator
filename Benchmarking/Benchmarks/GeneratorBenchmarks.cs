@@ -78,6 +78,48 @@ public class GeneratorBenchmarks
     /// </summary>
     [Benchmark]
     public int Cold_ManyAssembliesGraph() => GeneratorBenchmarkHarness.RunCold(m_manyAssembliesGraph);
+
+    /// <summary>
+    /// Re-runs the warmed driver against the exact same compilation it was warmed with. Floor/
+    /// reference point for the Incremental_* benchmarks below: since nothing at all changed, this
+    /// is the fastest possible incremental re-run and isolates Roslyn's own driver-level overhead
+    /// from any FactoryGenerator-specific recomputation.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_NoOpRerun() => GeneratorBenchmarkHarness.RunIncremental(m_featureRichIncremental.WarmDriver, m_featureRichIncremental.BaselineCompilation);
+
+    /// <summary>
+    /// Re-runs the warmed driver after only <c>Utilities.cs</c> changed — a file with zero
+    /// injectable types, entirely unrelated to dependency injection. In a well-incrementalized
+    /// generator this should cost close to <see cref="Incremental_NoOpRerun"/>; if
+    /// FactoryGenerator.Initialize()'s direct use of context.CompilationProvider (threaded through
+    /// GetInjectionScanScope, and combined in again for the analysis/RegisterSourceOutput stages)
+    /// poisons Roslyn's per-stage caching, this should instead cost close to a full cold run.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_UnrelatedEdit() => GeneratorBenchmarkHarness.RunIncremental(m_featureRichIncremental.WarmDriver, m_featureRichIncremental.UnrelatedEditCompilation);
+
+    /// <summary>
+    /// Re-runs the warmed driver after an injected constructor's parameters/defaults changed — a
+    /// legitimate, relevant edit that should cost something regardless of pipeline architecture.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_InjectedSignatureEdit() => GeneratorBenchmarkHarness.RunIncremental(m_featureRichIncremental.WarmDriver, m_featureRichIncremental.InjectedSignatureEditCompilation);
+
+    /// <summary>
+    /// Re-runs the warmed driver after a new <c>[Inject]</c> attribute was added — another
+    /// legitimate, relevant edit that should cost something regardless of pipeline architecture.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_AddInjection() => GeneratorBenchmarkHarness.RunIncremental(m_featureRichIncremental.WarmDriver, m_featureRichIncremental.AddInjectCompilation);
+
+    /// <summary>
+    /// Re-runs a warmed driver after a *referenced assembly's* source changed (not the current
+    /// compilation's own source). Exercises the metadata-symbol scanning path (GetRelevantAssemblies/
+    /// GetCandidateTypes over referenced assemblies) rather than the own-compilation discovery path.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_ReferenceAssemblyChange() => GeneratorBenchmarkHarness.RunIncremental(m_referenceAssemblyIncremental.WarmDriver, m_referenceAssemblyIncremental.ChangedCompilation);
 }
 
 internal sealed class ColdGeneratorScenario(CSharpCompilation compilation, AnalyzerConfigOptionsProvider optionsProvider)
