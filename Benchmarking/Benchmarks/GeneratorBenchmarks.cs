@@ -10,16 +10,18 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Benchmarks;
 
 [MemoryDiagnoser]
-[ShortRunJob]
+[Config(typeof(AccurateColdStartConfig))]
 [JsonExporterAttribute.Full]
 [JsonExporterAttribute.FullCompressed]
 public class GeneratorBenchmarks
 {
     private ColdGeneratorScenario m_constructorGraph = null!;
+    private ColdGeneratorScenario m_constructorGraphWithStaticExtensions = null!;
     private ColdGeneratorScenario m_noiseHeavyProject = null!;
     private ColdGeneratorScenario m_featureRichStaticExtensionsDisabled = null!;
     private ColdGeneratorScenario m_featureRichStaticExtensionsEnabled = null!;
     private ColdGeneratorScenario m_multiAssemblyOverrideGraph = null!;
+    private ColdGeneratorScenario m_manyAssembliesGraph = null!;
     private FeatureRichIncrementalScenario m_featureRichIncremental = null!;
     private IncrementalGeneratorScenario m_referenceAssemblyIncremental = null!;
 
@@ -27,22 +29,35 @@ public class GeneratorBenchmarks
     public void Setup()
     {
         m_constructorGraph = GeneratorBenchmarkScenarioFactory.CreateConstructorGraph(serviceCount: 250);
+        m_constructorGraphWithStaticExtensions = GeneratorBenchmarkScenarioFactory.CreateConstructorGraphWithStaticExtensions(serviceCount: 250);
         m_noiseHeavyProject = GeneratorBenchmarkScenarioFactory.CreateNoiseHeavyProject(serviceCount: 64, noiseTypeCount: 2000);
         m_featureRichStaticExtensionsDisabled = GeneratorBenchmarkScenarioFactory.CreateFeatureRichGraph(emitStaticExtensions: false);
         m_featureRichStaticExtensionsEnabled = GeneratorBenchmarkScenarioFactory.CreateFeatureRichGraph(emitStaticExtensions: true);
         m_multiAssemblyOverrideGraph = GeneratorBenchmarkScenarioFactory.CreateMultiAssemblyOverrideGraph(baseServiceCount: 128, overrideCount: 16);
+        m_manyAssembliesGraph = GeneratorBenchmarkScenarioFactory.CreateManyAssembliesGraph(assemblyCount: 25, typesPerAssembly: 2);
         m_featureRichIncremental = GeneratorBenchmarkScenarioFactory.CreateFeatureRichIncrementalScenario();
         m_referenceAssemblyIncremental = GeneratorBenchmarkScenarioFactory.CreateReferenceAssemblyIncrementalScenario();
 
         GeneratorBenchmarkHarness.Validate(m_constructorGraph);
+        GeneratorBenchmarkHarness.Validate(m_constructorGraphWithStaticExtensions);
         GeneratorBenchmarkHarness.Validate(m_noiseHeavyProject);
         GeneratorBenchmarkHarness.Validate(m_featureRichStaticExtensionsDisabled);
         GeneratorBenchmarkHarness.Validate(m_featureRichStaticExtensionsEnabled);
         GeneratorBenchmarkHarness.Validate(m_multiAssemblyOverrideGraph);
+        GeneratorBenchmarkHarness.Validate(m_manyAssembliesGraph);
     }
 
     [Benchmark]
     public int Cold_ConstructorGraph() => GeneratorBenchmarkHarness.RunCold(m_constructorGraph);
+
+    /// <summary>
+    /// Same 250-service linear dependency chain as <see cref="Cold_ConstructorGraph"/>, but with
+    /// static extensions enabled — isolates PropagateStaticExtensionRequirements's fixed-point-loop
+    /// cost (a hypothesized, previously-untested scaling risk for long chains) from the ordinary
+    /// per-injection processing cost already captured by Cold_ConstructorGraph.
+    /// </summary>
+    [Benchmark]
+    public int Cold_ConstructorGraph_StaticExtensionsEnabled() => GeneratorBenchmarkHarness.RunCold(m_constructorGraphWithStaticExtensions);
 
     [Benchmark]
     public int Cold_NoiseHeavyProject() => GeneratorBenchmarkHarness.RunCold(m_noiseHeavyProject);
@@ -55,6 +70,56 @@ public class GeneratorBenchmarks
 
     [Benchmark]
     public int Cold_MultiAssemblyOverrideGraph() => GeneratorBenchmarkHarness.RunCold(m_multiAssemblyOverrideGraph);
+
+    /// <summary>
+    /// 25 small assemblies where each layer cumulatively references every prior layer
+    /// (O(n^2) reference edges), isolating <c>GetRelevantAssemblies</c>'s assembly-reachability
+    /// BFS/DFS cost from per-type scanning cost (already covered by <see cref="Cold_NoiseHeavyProject"/>).
+    /// </summary>
+    [Benchmark]
+    public int Cold_ManyAssembliesGraph() => GeneratorBenchmarkHarness.RunCold(m_manyAssembliesGraph);
+
+    /// <summary>
+    /// Re-runs the warmed driver against the exact same compilation it was warmed with. Floor/
+    /// reference point for the Incremental_* benchmarks below: since nothing at all changed, this
+    /// is the fastest possible incremental re-run and isolates Roslyn's own driver-level overhead
+    /// from any FactoryGenerator-specific recomputation.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_NoOpRerun() => GeneratorBenchmarkHarness.RunIncremental(m_featureRichIncremental.WarmDriver, m_featureRichIncremental.BaselineCompilation);
+
+    /// <summary>
+    /// Re-runs the warmed driver after only <c>Utilities.cs</c> changed — a file with zero
+    /// injectable types, entirely unrelated to dependency injection. In a well-incrementalized
+    /// generator this should cost close to <see cref="Incremental_NoOpRerun"/>; if
+    /// FactoryGenerator.Initialize()'s direct use of context.CompilationProvider (threaded through
+    /// GetInjectionScanScope, and combined in again for the analysis/RegisterSourceOutput stages)
+    /// poisons Roslyn's per-stage caching, this should instead cost close to a full cold run.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_UnrelatedEdit() => GeneratorBenchmarkHarness.RunIncremental(m_featureRichIncremental.WarmDriver, m_featureRichIncremental.UnrelatedEditCompilation);
+
+    /// <summary>
+    /// Re-runs the warmed driver after an injected constructor's parameters/defaults changed — a
+    /// legitimate, relevant edit that should cost something regardless of pipeline architecture.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_InjectedSignatureEdit() => GeneratorBenchmarkHarness.RunIncremental(m_featureRichIncremental.WarmDriver, m_featureRichIncremental.InjectedSignatureEditCompilation);
+
+    /// <summary>
+    /// Re-runs the warmed driver after a new <c>[Inject]</c> attribute was added — another
+    /// legitimate, relevant edit that should cost something regardless of pipeline architecture.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_AddInjection() => GeneratorBenchmarkHarness.RunIncremental(m_featureRichIncremental.WarmDriver, m_featureRichIncremental.AddInjectCompilation);
+
+    /// <summary>
+    /// Re-runs a warmed driver after a *referenced assembly's* source changed (not the current
+    /// compilation's own source). Exercises the metadata-symbol scanning path (GetRelevantAssemblies/
+    /// GetCandidateTypes over referenced assemblies) rather than the own-compilation discovery path.
+    /// </summary>
+    [Benchmark]
+    public int Incremental_ReferenceAssemblyChange() => GeneratorBenchmarkHarness.RunIncremental(m_referenceAssemblyIncremental.WarmDriver, m_referenceAssemblyIncremental.ChangedCompilation);
 }
 
 internal sealed class ColdGeneratorScenario(CSharpCompilation compilation, AnalyzerConfigOptionsProvider optionsProvider)
@@ -166,6 +231,22 @@ internal static class GeneratorBenchmarkScenarioFactory
         return new ColdGeneratorScenario(compilation, s_staticExtensionsDisabledOptions);
     }
 
+    /// <summary>
+    /// Same long linear dependency chain as <see cref="CreateConstructorGraph"/>, but with static
+    /// extensions enabled. Exists to directly measure whether
+    /// <c>PropagateStaticExtensionRequirements</c>'s fixed-point loop (which can take one iteration
+    /// per hop of a dependency chain to converge) scales poorly with chain length, rather than
+    /// leaving that as an untested hypothesis.
+    /// </summary>
+    public static ColdGeneratorScenario CreateConstructorGraphWithStaticExtensions(int serviceCount)
+    {
+        var compilation = CreateCompilation(
+            "GeneratorConstructorGraphStaticExtensionsBenchmarks",
+            new BenchmarkSourceDocument("ConstructorGraph.cs", BuildConstructorGraphSource("GeneratorConstructorGraphStaticExtensionsInput", serviceCount)));
+
+        return new ColdGeneratorScenario(compilation, s_staticExtensionsEnabledOptions);
+    }
+
     public static ColdGeneratorScenario CreateNoiseHeavyProject(int serviceCount, int noiseTypeCount)
     {
         var compilation = CreateCompilation(
@@ -203,6 +284,35 @@ internal static class GeneratorBenchmarkScenarioFactory
             new BenchmarkSourceDocument("DerivedServices.cs", BuildOverrideDerivedSource(baseAssemblyName, derivedAssemblyName, baseServiceCount, overrideCount)));
 
         return new ColdGeneratorScenario(derivedCompilation, s_staticExtensionsDisabledOptions);
+    }
+
+    /// <summary>
+    /// A layered graph of many small assemblies where each layer cumulatively references every
+    /// prior layer (fan-in), producing O(assemblyCount^2) reference edges rather than one edge per
+    /// assembly. Exists to measure <c>GetRelevantAssemblies</c>'s assembly-reachability BFS cost in
+    /// isolation, since <see cref="CreateMultiAssemblyOverrideGraph"/> only involves 2 custom
+    /// assemblies and can't show a signal for that specific cost.
+    /// </summary>
+    public static ColdGeneratorScenario CreateManyAssembliesGraph(int assemblyCount, int typesPerAssembly)
+    {
+        var priorReferences = ImmutableArray<MetadataReference>.Empty;
+        CSharpCompilation compilation = null!;
+        for (var i = 0; i < assemblyCount; i++)
+        {
+            var assemblyName = $"GeneratorManyAssembliesLayer{i}";
+            var references = priorReferences.IsDefaultOrEmpty ? s_metadataReferences : s_metadataReferences.AddRange(priorReferences);
+            compilation = CreateCompilation(
+                assemblyName,
+                references,
+                new BenchmarkSourceDocument($"Layer{i}.cs", BuildManyAssembliesLayerSource(assemblyName, i, typesPerAssembly)));
+
+            // The final layer doesn't need to be emitted; only earlier layers need a real
+            // MetadataReference so later layers can reference them.
+            if (i < assemblyCount - 1)
+                priorReferences = priorReferences.Add(EmitReference(compilation));
+        }
+
+        return new ColdGeneratorScenario(compilation, s_staticExtensionsDisabledOptions);
     }
 
     public static FeatureRichIncrementalScenario CreateFeatureRichIncrementalScenario()
@@ -633,6 +743,27 @@ internal static class GeneratorBenchmarkScenarioFactory
         sb.AppendLine($"public sealed class DerivedRoot(ISharedService sharedService, INode0 firstNode, INode{baseServiceCount - 1} lastNode)");
         sb.AppendLine("{");
         sb.AppendLine("}");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    private static string BuildManyAssembliesLayerSource(string assemblyName, int layerIndex, int typesPerLayer)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("using FactoryGenerator.Attributes;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {assemblyName}");
+        sb.AppendLine("{");
+
+        for (var i = 0; i < typesPerLayer; i++)
+        {
+            sb.AppendLine("[Inject]");
+            sb.AppendLine($"public sealed class Layer{layerIndex}Service{i}");
+            sb.AppendLine("{");
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("}");
         return sb.ToString();
     }

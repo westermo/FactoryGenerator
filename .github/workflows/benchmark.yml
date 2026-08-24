@@ -28,26 +28,35 @@ jobs:
         run: cd Benchmarking/Benchmarks && dotnet run -c Release --exporters json --filter '*'
 
       - name: Store runtime benchmark result
-        uses: rhysd/github-action-benchmark@v1
+        uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Benchmark.Net Benchmark
           tool: 'benchmarkdotnet'
           output-file-path: Benchmarking/Benchmarks/BenchmarkDotNet.Artifacts/results/Benchmarks.ResolveBenchmarks-report-full-compressed.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
           summary-always: true
           # Show alert with commit comment on detecting possible performance regression
           alert-threshold: '200%'
-          comment-on-alert: true
+          comment-on-alert: false
+          fail-on-alert: false
+          auto-push: true
+
+      - name: Reset gh-pages branch for second benchmark
+        run: |
+          git fetch origin gh-pages:gh-pages --force || true          
 
       - name: Store generator benchmark result
-        uses: rhysd/github-action-benchmark@v1
+        uses: benchmark-action/github-action-benchmark@v1
         with:
           name: Generator Benchmark.Net Benchmark
           tool: 'benchmarkdotnet'
           output-file-path: Benchmarking/Benchmarks/BenchmarkDotNet.Artifacts/results/Benchmarks.GeneratorBenchmarks-report-full-compressed.json
           github-token: ${{ secrets.GITHUB_TOKEN }}
-          auto-push: true
           summary-always: true
           alert-threshold: '200%'
-          comment-on-alert: true
+          comment-on-alert: false
+          fail-on-alert: false
+          # The prior step already fetched and locally committed to gh-pages in this same job;
+          # re-fetching here would be rejected as non-fast-forward against that local commit.
+          skip-fetch-gh-pages: true
+          auto-push: true

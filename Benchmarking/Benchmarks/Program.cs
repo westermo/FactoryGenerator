@@ -10,11 +10,19 @@ namespace Benchmarks;
 // ── Dictionary-based resolution (existing path) ──────────────────────────────
 
 [MemoryDiagnoser]
+[Config(typeof(AccurateMicroBenchmarkConfig))]
 [JsonExporterAttribute.Full]
 [JsonExporterAttribute.FullCompressed]
 public class ResolveBenchmarks
 {
     private readonly DependencyInjectionContainer m_container = new(default, default, new NonInjectedClass());
+    private ILifetimeScope m_scope = null!;
+
+    [GlobalSetup]
+    public void Setup() => m_scope = m_container.BeginLifetimeScope();
+
+    [GlobalCleanup]
+    public void Cleanup() => m_scope.Dispose();
 
     [Benchmark]
     public ChainA ResolveChain() => m_container.Resolve<ChainA>();
@@ -41,6 +49,32 @@ public class ResolveBenchmarks
         // invocation must clean up or the inheritor chain grows across operations.
         using var child = new DependencyInjectionContainer(m_container);
     }
+
+    [Benchmark]
+    public void CreateLifetimeScope()
+    {
+        // Like CreateFromSelf above, a scope attaches to m_container's Inheritor chain until
+        // disposed, so each invocation must clean up or the chain grows across operations.
+        // LifetimeScope is now a thin subclass of DependencyInjectionContainer (it inherits every
+        // factory/lookup member instead of duplicating them) — this measures that construction path.
+        using var scope = m_container.BeginLifetimeScope();
+    }
+
+    // ── Resolution through a LifetimeScope ───────────────────────────────────────
+    //
+    // m_scope is a single long-lived scope (created in Setup, disposed in Cleanup), so these
+    // benchmark steady-state resolve cost, not scope creation (see CreateLifetimeScope above).
+    //
+    // ResolveSingletonThroughScope exercises the owner-forwarding check added to singleton members
+    // (`if (m_singletonOwner != this) return m_singletonOwner.X();`) so every singleton resolves to
+    // the one instance owned by the root container, regardless of which scope resolves it.
+    // ResolveScopedThroughScope is the control case: [Scoped] members are cached per-scope-instance
+    // and never forward, so this exercises the unchanged local-cache path for comparison.
+    [Benchmark]
+    public ISingleton ResolveSingletonThroughScope() => m_scope.Resolve<ISingleton>();
+
+    [Benchmark]
+    public IScoped ResolveScopedThroughScope() => m_scope.Resolve<IScoped>();
 
     // ── Static-extension resolution (C# 14 / .NET 10+ path) ─────────────────────
     //

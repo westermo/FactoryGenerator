@@ -40,7 +40,7 @@ public class ContainerRegistryTests
         var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
         // Build a chain using the registry
-        var final = ContainerRegistry.BuildChain(baseContainer, new[] { "Inheritor" });
+        var final = ContainerRegistry.BuildChain(baseContainer, ["Inheritor"]);
 
         // The final container should be able to resolve types from the base
         final.Resolve<IType>().ShouldNotBeNull();
@@ -65,7 +65,7 @@ public class ContainerRegistryTests
         EnsureContainerEntryPointModuleInitialized();
         var baseContainer = new DependencyInjectionContainer(default, default, new NonInjectedClass());
 
-        var final = ContainerRegistry.BuildChain(baseContainer, new[] { "Inheritor" });
+        var final = ContainerRegistry.BuildChain(baseContainer, ["Inheritor"]);
 
         ReferenceEquals(final, baseContainer).ShouldBeTrue();
         final.Inheritor.ShouldBeNull();

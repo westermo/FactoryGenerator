@@ -92,24 +92,32 @@ namespace FactoryGenerator
                 }
             }
 
-            var interfaces = acquireChildInterfaces ? namedTypeSymbol.AllInterfaces : namedTypeSymbol.Interfaces;
-            if (asSelf)
-                interfaces = interfaces.Add(namedTypeSymbol);
-            interfaces = interfaces.AddRange(attributedInterfaces);
-
             var isDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.SpecialType == SpecialType.System_IDisposable);
-            var isAsyncDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.ToString() == "System.IAsyncDisposable");
-            var disposableIface = interfaces.FirstOrDefault(i => i.SpecialType == SpecialType.System_IDisposable);
-            if (disposableIface is not null)
-                interfaces = interfaces.Remove(disposableIface);
-            var asyncDisposableIface = interfaces.FirstOrDefault(i => i.ToString() == "System.IAsyncDisposable");
-            if (asyncDisposableIface is not null)
-                interfaces = interfaces.Remove(asyncDisposableIface);
+            var isAsyncDisposable = namedTypeSymbol.AllInterfaces.Any(IsAsyncDisposableInterface);
 
-            interfaces = interfaces
-                .RemoveRange(preventedInterfaces)
-                .Distinct(SymbolEqualityComparer.Default)
-                .Cast<INamedTypeSymbol>()
+            // Accumulated into a single mutable list rather than chaining Add/AddRange/Remove/
+            // RemoveRange calls on an ImmutableArray, each of which would otherwise copy the whole
+            // backing array — a list gives amortized O(1) appends and the same O(n) removals
+            // (unavoidable either way) without the repeated whole-array copies in between.
+            var baseInterfaces = acquireChildInterfaces ? namedTypeSymbol.AllInterfaces : namedTypeSymbol.Interfaces;
+            var interfaceList = new List<INamedTypeSymbol>(baseInterfaces.Length + attributedInterfaces.Count + 1);
+            interfaceList.AddRange(baseInterfaces);
+            if (asSelf)
+                interfaceList.Add(namedTypeSymbol);
+            interfaceList.AddRange(attributedInterfaces);
+
+            var disposableIface = interfaceList.FirstOrDefault(i => i.SpecialType == SpecialType.System_IDisposable);
+            if (disposableIface is not null)
+                interfaceList.Remove(disposableIface);
+            var asyncDisposableIface = interfaceList.FirstOrDefault(IsAsyncDisposableInterface);
+            if (asyncDisposableIface is not null)
+                interfaceList.Remove(asyncDisposableIface);
+
+            foreach (var prevented in preventedInterfaces)
+                interfaceList.Remove(prevented);
+
+            var interfaces = interfaceList
+                .Distinct((IEqualityComparer<INamedTypeSymbol>) SymbolEqualityComparer.Default)
                 .ToImmutableArray();
 
             var ifaceFullNames = interfaces.Select(i => i.ToString()!).ToImmutableArray();
@@ -177,6 +185,16 @@ namespace FactoryGenerator
                 return new BooleanInjection(true, key);
             return null;
         }
+
+        /// <summary>
+        /// Checks whether an interface is <c>System.IAsyncDisposable</c> without paying for a full
+        /// display-string (<c>ToString()</c>) computation on every interface. Roslyn has no
+        /// <see cref="SpecialType"/> entry for it (it postdates the "special type" list), so a name
+        /// check first is used to filter out the overwhelming majority of unrelated interfaces before
+        /// falling back to the (cheaper, non-generic) containing-namespace comparison.
+        /// </summary>
+        private static bool IsAsyncDisposableInterface(INamedTypeSymbol i) =>
+            i.Name == "IAsyncDisposable" && i.ContainingNamespace?.ToDisplayString() == "System";
 
         private static int GetAssemblyPriority(IAssemblySymbol? assemblySymbol)
         {

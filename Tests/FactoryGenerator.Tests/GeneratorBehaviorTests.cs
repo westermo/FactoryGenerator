@@ -15,35 +15,35 @@ public class GeneratorBehaviorTests
     public void GeneratorRejectsMultipleExternalValuesOfSameType()
     {
         const string source = """
-using FactoryGenerator.Attributes;
+                              using FactoryGenerator.Attributes;
 
-namespace Sample
-{
-public interface IService
-{
-}
+                              namespace Sample
+                              {
+                              public interface IService
+                              {
+                              }
 
-public class ExternalValue
-{
-}
+                              public class ExternalValue
+                              {
+                              }
 
-[Inject]
-public class FirstConsumer : IService
-{
-    public FirstConsumer(ExternalValue first)
-    {
-    }
-}
+                              [Inject]
+                              public class FirstConsumer : IService
+                              {
+                                  public FirstConsumer(ExternalValue first)
+                                  {
+                                  }
+                              }
 
-[Inject, Self]
-public class SecondConsumer
-{
-    public SecondConsumer(ExternalValue second)
-    {
-    }
-}
-}
-""";
+                              [Inject, Self]
+                              public class SecondConsumer
+                              {
+                                  public SecondConsumer(ExternalValue second)
+                                  {
+                                  }
+                              }
+                              }
+                              """;
 
         var compilation = CreateCompilation(source);
         var (runResult, _) = RunGenerator(compilation);
@@ -56,28 +56,27 @@ public class SecondConsumer
     }
 
     [Test]
-    public void GeneratorSupportsBooleanKeysThatAreNotIdentifiers()
+    public void GeneratorPicksUpClassesViaAttributeAppliedToImplementedInterface()
     {
+        // [Inject] is declared on the interface, not the implementing class. FindMethods must
+        // still discover ImplicitlyInjected by checking type.AllInterfaces for attributes, not just
+        // the type's own attributes — pins down this (previously untested) discovery path so it
+        // can't silently regress in a future refactor of the type-scanning pipeline.
         const string source = """
-using FactoryGenerator.Attributes;
+                              using FactoryGenerator.Attributes;
 
-namespace Sample
-{
-public interface IService
-{
-}
+                              namespace Sample
+                              {
+                              [Inject]
+                              public interface IMarker
+                              {
+                              }
 
-[Inject, Boolean("feature-flag")]
-public class EnabledService : IService
-{
-}
-
-[Inject]
-public class FallbackService : IService
-{
-}
-}
-""";
+                              public class ImplicitlyInjected : IMarker
+                              {
+                              }
+                              }
+                              """;
 
         var compilation = CreateCompilation(source);
         var (runResult, outputCompilation) = RunGenerator(compilation);
@@ -85,9 +84,47 @@ public class FallbackService : IService
 
         generatorResult.Exception.ShouldBeNull();
         outputCompilation.GetDiagnostics()
-            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-            .ToArray()
-            .ShouldBeEmpty();
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
+
+        var generatedSource = string.Join(Environment.NewLine, generatorResult.GeneratedSources.Select(sourceResult => sourceResult.SourceText.ToString()));
+        generatedSource.ShouldContain("ImplicitlyInjected");
+    }
+
+    [Test]
+    public void GeneratorSupportsBooleanKeysThatAreNotIdentifiers()
+    {
+        const string source = """
+                              using FactoryGenerator.Attributes;
+
+                              namespace Sample
+                              {
+                              public interface IService
+                              {
+                              }
+
+                              [Inject, Boolean("feature-flag")]
+                              public class EnabledService : IService
+                              {
+                              }
+
+                              [Inject]
+                              public class FallbackService : IService
+                              {
+                              }
+                              }
+                              """;
+
+        var compilation = CreateCompilation(source);
+        var (runResult, outputCompilation) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
 
         var generatedSource = string.Join(Environment.NewLine, generatorResult.GeneratedSources.Select(sourceResult => sourceResult.SourceText.ToString()));
         generatedSource.ShouldContain("\"feature-flag\"");
@@ -100,20 +137,20 @@ public class FallbackService : IService
     {
         var assemblyName = "BooleanOnly" + Guid.NewGuid().ToString("N");
         var source = $$"""
-using FactoryGenerator.Attributes;
+                       using FactoryGenerator.Attributes;
 
-namespace {{assemblyName}}
-{
-public interface IService
-{
-}
+                       namespace {{assemblyName}}
+                       {
+                       public interface IService
+                       {
+                       }
 
-[Inject, Boolean("enabled")]
-public class EnabledService : IService
-{
-}
-}
-""";
+                       [Inject, Boolean("enabled")]
+                       public class EnabledService : IService
+                       {
+                       }
+                       }
+                       """;
 
         var compilation = CreateCompilation(assemblyName, source);
         var (runResult, outputCompilation) = RunGenerator(compilation);
@@ -121,22 +158,22 @@ public class EnabledService : IService
 
         generatorResult.Exception.ShouldBeNull();
         outputCompilation.GetDiagnostics()
-            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-            .ToArray()
-            .ShouldBeEmpty();
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
 
         var expectedMessage = $"Cannot resolve {assemblyName}.IService without a matching implementation";
         var declarations = generatorResult.GeneratedSources
-            .Single(sourceResult => sourceResult.HintName == "DependencyInjectionContainer.Declarations.g.cs")
-            .SourceText
-            .ToString();
+                                          .Single(sourceResult => sourceResult.HintName == $"FactoryGenerator.Declarations/{assemblyName}_IService().g.cs")
+                                          .SourceText
+                                          .ToString();
         declarations.ShouldContain(expectedMessage);
         declarations.ShouldNotContain("null!");
 
         var staticExtensions = generatorResult.GeneratedSources
-            .Single(sourceResult => sourceResult.HintName == "DependencyInjectionContainer.StaticExtensions.g.cs")
-            .SourceText
-            .ToString();
+                                              .Single(sourceResult => sourceResult.HintName == $"FactoryGenerator.StaticExtensions/{assemblyName}_IServiceExtensions.g.cs")
+                                              .SourceText
+                                              .ToString();
         staticExtensions.ShouldContain(expectedMessage);
 
         var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
@@ -146,7 +183,7 @@ public class EnabledService : IService
         containerType.ShouldNotBeNull();
         serviceType.ShouldNotBeNull();
 
-        var container = (IContainer)Activator.CreateInstance(containerType!, new object[] { false })!;
+        var container = (IContainer) Activator.CreateInstance(containerType!, [false])!;
         var exception = Should.Throw<InvalidOperationException>(() => container.Resolve(serviceType!));
         exception.Message.ShouldContain(expectedMessage);
     }
@@ -155,35 +192,35 @@ public class EnabledService : IService
     public void GeneratorDetectsCyclesThroughInjectedMethods()
     {
         const string source = """
-using FactoryGenerator.Attributes;
+                              using FactoryGenerator.Attributes;
 
-namespace Sample
-{
-public interface IResult
-{
-}
+                              namespace Sample
+                              {
+                              public interface IResult
+                              {
+                              }
 
-public class Result : IResult
-{
-}
+                              public class Result : IResult
+                              {
+                              }
 
-public interface IFactory
-{
-    [Inject]
-    IResult Create();
-}
+                              public interface IFactory
+                              {
+                                  [Inject]
+                                  IResult Create();
+                              }
 
-[Inject]
-public class Factory : IFactory
-{
-    public Factory(IResult result)
-    {
-    }
+                              [Inject]
+                              public class Factory : IFactory
+                              {
+                                  public Factory(IResult result)
+                                  {
+                                  }
 
-    public IResult Create() => new Result();
-}
-}
-""";
+                                  public IResult Create() => new Result();
+                              }
+                              }
+                              """;
 
         var compilation = CreateCompilation(source);
         var (runResult, _) = RunGenerator(compilation);
@@ -199,35 +236,35 @@ public class Factory : IFactory
     public void GeneratorDetectsCyclesThroughInjectedProperties()
     {
         const string source = """
-using FactoryGenerator.Attributes;
+                              using FactoryGenerator.Attributes;
 
-namespace Sample
-{
-public interface IResult
-{
-}
+                              namespace Sample
+                              {
+                              public interface IResult
+                              {
+                              }
 
-public class Result : IResult
-{
-}
+                              public class Result : IResult
+                              {
+                              }
 
-public interface IFactory
-{
-    [Inject]
-    IResult Value { get; }
-}
+                              public interface IFactory
+                              {
+                                  [Inject]
+                                  IResult Value { get; }
+                              }
 
-[Inject]
-public class Factory : IFactory
-{
-    public Factory(IResult result)
-    {
-    }
+                              [Inject]
+                              public class Factory : IFactory
+                              {
+                                  public Factory(IResult result)
+                                  {
+                                  }
 
-    public IResult Value => new Result();
-}
-}
-""";
+                                  public IResult Value => new Result();
+                              }
+                              }
+                              """;
 
         var compilation = CreateCompilation(source);
         var (runResult, _) = RunGenerator(compilation);
@@ -244,66 +281,66 @@ public class Factory : IFactory
     {
         var assemblyName = "InjectedMethod" + Guid.NewGuid().ToString("N");
         var source = $$"""
-using FactoryGenerator.Attributes;
+                       using FactoryGenerator.Attributes;
 
-namespace {{assemblyName}}
-{
-public sealed class ExternalInput
-{
-    public ExternalInput(string name)
-    {
-        Name = name;
-    }
+                       namespace {{assemblyName}}
+                       {
+                       public sealed class ExternalInput
+                       {
+                           public ExternalInput(string name)
+                           {
+                               Name = name;
+                           }
 
-    public string Name { get; }
-}
+                           public string Name { get; }
+                       }
 
-public interface IPart
-{
-}
+                       public interface IPart
+                       {
+                       }
 
-[Inject]
-public class PartOne : IPart
-{
-}
+                       [Inject]
+                       public class PartOne : IPart
+                       {
+                       }
 
-[Inject]
-public class PartTwo : IPart
-{
-}
+                       [Inject]
+                       public class PartTwo : IPart
+                       {
+                       }
 
-public interface IResult
-{
-}
+                       public interface IResult
+                       {
+                       }
 
-public sealed class Result : IResult
-{
-    public Result(string summary, int partCount)
-    {
-        Summary = summary;
-        PartCount = partCount;
-    }
+                       public sealed class Result : IResult
+                       {
+                           public Result(string summary, int partCount)
+                           {
+                               Summary = summary;
+                               PartCount = partCount;
+                           }
 
-    public string Summary { get; }
-    public int PartCount { get; }
-}
+                           public string Summary { get; }
+                           public int PartCount { get; }
+                       }
 
-public interface IFactory
-{
-    [Inject]
-    IResult Create(ExternalInput input, string label = "default", params IPart[] parts);
-}
+                       public interface IFactory
+                       {
+                           [Inject]
+                           IResult Create(ExternalInput input, string label = "default", params IPart[] parts);
+                       }
 
-[Inject]
-public class Factory : IFactory
-{
-    public IResult Create(ExternalInput input, string label = "default", params IPart[] parts)
-    {
-        return new Result(input.Name + ":" + label, parts.Length);
-    }
-}
-}
-""";
+                       [Inject]
+                       public class Factory : IFactory
+                       {
+                           public IResult Create(ExternalInput input, string label = "default", params IPart[] parts)
+                           {
+                               return new Result(input.Name + ":" + label, parts.Length);
+                           }
+                       }
+                       }
+                       """;
 
         var compilation = CreateCompilation(assemblyName, source);
         var (runResult, outputCompilation) = RunGenerator(compilation);
@@ -311,9 +348,9 @@ public class Factory : IFactory
 
         generatorResult.Exception.ShouldBeNull();
         outputCompilation.GetDiagnostics()
-            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-            .ToArray()
-            .ShouldBeEmpty();
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
 
         var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
         var containerType = assembly.GetType($"{assemblyName}.Generated.DependencyInjectionContainer");
@@ -325,14 +362,14 @@ public class Factory : IFactory
         serviceType.ShouldNotBeNull();
 
         var constructor = containerType!.GetConstructors()
-            .Single(ctor =>
-            {
-                var parameters = ctor.GetParameters();
-                return parameters.Length == 1 && parameters[0].ParameterType == externalType;
-            });
+                                        .Single(ctor =>
+                                        {
+                                            var parameters = ctor.GetParameters();
+                                            return parameters.Length == 1 && parameters[0].ParameterType == externalType;
+                                        });
 
         var external = Activator.CreateInstance(externalType!, "runtime");
-        var container = (IContainer)constructor.Invoke(new[] { external! });
+        var container = (IContainer) constructor.Invoke([external!]);
         var resolved = container.Resolve(serviceType!);
 
         resolved.GetType().GetProperty("Summary")!.GetValue(resolved).ShouldBe("runtime:default");
@@ -344,38 +381,38 @@ public class Factory : IFactory
     {
         var assemblyName = "InjectedConstructor" + Guid.NewGuid().ToString("N");
         var source = $$"""
-using FactoryGenerator.Attributes;
+                       using FactoryGenerator.Attributes;
 
-namespace {{assemblyName}}
-{
-public interface IPart
-{
-}
+                       namespace {{assemblyName}}
+                       {
+                       public interface IPart
+                       {
+                       }
 
-[Inject]
-public class PartOne : IPart
-{
-}
+                       [Inject]
+                       public class PartOne : IPart
+                       {
+                       }
 
-[Inject]
-public class PartTwo : IPart
-{
-}
+                       [Inject]
+                       public class PartTwo : IPart
+                       {
+                       }
 
-[Inject, Self]
-public sealed class Consumer
-{
-    public Consumer(string label = "default", params IPart[] parts)
-    {
-        Summary = label;
-        PartCount = parts.Length;
-    }
+                       [Inject, Self]
+                       public sealed class Consumer
+                       {
+                           public Consumer(string label = "default", params IPart[] parts)
+                           {
+                               Summary = label;
+                               PartCount = parts.Length;
+                           }
 
-    public string Summary { get; }
-    public int PartCount { get; }
-}
-}
-""";
+                           public string Summary { get; }
+                           public int PartCount { get; }
+                       }
+                       }
+                       """;
 
         var compilation = CreateCompilation(assemblyName, source);
         var (runResult, outputCompilation) = RunGenerator(compilation);
@@ -383,9 +420,9 @@ public sealed class Consumer
 
         generatorResult.Exception.ShouldBeNull();
         outputCompilation.GetDiagnostics()
-            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-            .ToArray()
-            .ShouldBeEmpty();
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
 
         var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
         var containerType = assembly.GetType($"{assemblyName}.Generated.DependencyInjectionContainer");
@@ -394,7 +431,7 @@ public sealed class Consumer
         containerType.ShouldNotBeNull();
         consumerType.ShouldNotBeNull();
 
-        var container = (IContainer)Activator.CreateInstance(containerType!)!;
+        var container = (IContainer) Activator.CreateInstance(containerType!)!;
         var resolved = container.Resolve(consumerType!);
 
         resolved.GetType().GetProperty("Summary")!.GetValue(resolved).ShouldBe("default");
@@ -408,38 +445,38 @@ public sealed class Consumer
         var derivedAssemblyName = "PriorityDerived" + Guid.NewGuid().ToString("N");
 
         var baseSource = $$"""
-using FactoryGenerator.Attributes;
+                           using FactoryGenerator.Attributes;
 
-[assembly: InjectionPriority(9)]
+                           [assembly: InjectionPriority(9)]
 
-namespace {{baseAssemblyName}}
-{
-public interface IService
-{
-}
+                           namespace {{baseAssemblyName}}
+                           {
+                           public interface IService
+                           {
+                           }
 
-[Inject]
-public class BaseService : IService
-{
-}
-}
-""";
+                           [Inject]
+                           public class BaseService : IService
+                           {
+                           }
+                           }
+                           """;
 
         var derivedSource = $$"""
-using FactoryGenerator.Attributes;
-using {{baseAssemblyName}};
+                              using FactoryGenerator.Attributes;
+                              using {{baseAssemblyName}};
 
-namespace {{derivedAssemblyName}}
-{
-[Inject]
-public class DerivedService : IService
-{
-}
-}
-""";
+                              namespace {{derivedAssemblyName}}
+                              {
+                              [Inject]
+                              public class DerivedService : IService
+                              {
+                              }
+                              }
+                              """;
 
         var baseCompilation = CreateCompilation(baseAssemblyName, baseSource);
-var (baseReference, _) = EmitReference(baseCompilation);
+        var (baseReference, _) = EmitReference(baseCompilation);
         var derivedCompilation = CreateCompilation(derivedAssemblyName, derivedSource, baseReference);
 
         var (runResult, outputCompilation) = RunGenerator(derivedCompilation);
@@ -447,9 +484,9 @@ var (baseReference, _) = EmitReference(baseCompilation);
 
         generatorResult.Exception.ShouldBeNull();
         outputCompilation.GetDiagnostics()
-            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
-            .ToArray()
-            .ShouldBeEmpty();
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
 
         var serviceMemberName = baseAssemblyName + "_IService()";
         var prioritizedImplementationMemberName = baseAssemblyName + "_BaseService()";
@@ -474,18 +511,18 @@ var (baseReference, _) = EmitReference(baseCompilation);
             "Inheritor",
             "TestWebApp"
         };
-        var references = ((string?)AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
-            .Split(Path.PathSeparator)
-            .Where(path => !excludedAssemblies.Contains(Path.GetFileNameWithoutExtension(path), StringComparer.Ordinal))
-            .Select(path => (MetadataReference)MetadataReference.CreateFromFile(path))
-            .ToList();
+        var references = ((string?) AppContext.GetData("TRUSTED_PLATFORM_ASSEMBLIES"))!
+                         .Split(Path.PathSeparator)
+                         .Where(path => !excludedAssemblies.Contains(Path.GetFileNameWithoutExtension(path), StringComparer.Ordinal))
+                         .Select(path => (MetadataReference) MetadataReference.CreateFromFile(path))
+                         .ToList();
 
         references.Add(MetadataReference.CreateFromFile(typeof(InjectAttribute).Assembly.Location));
         references.AddRange(additionalReferences);
 
         return CSharpCompilation.Create(
             assemblyName: assemblyName,
-            syntaxTrees: new[] { syntaxTree },
+            syntaxTrees: [syntaxTree],
             references: references,
             options: new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary));
     }
@@ -497,7 +534,7 @@ var (baseReference, _) = EmitReference(baseCompilation);
 
     private static (GeneratorDriverRunResult RunResult, Compilation OutputCompilation) RunGenerator(CSharpCompilation compilation)
     {
-        var parseOptions = (CSharpParseOptions)compilation.SyntaxTrees.First().Options;
+        var parseOptions = (CSharpParseOptions) compilation.SyntaxTrees.First().Options;
         GeneratorDriver driver = CSharpGeneratorDriver.Create(
             [new global::FactoryGenerator.FactoryGenerator().AsSourceGenerator()],
             parseOptions: parseOptions);
