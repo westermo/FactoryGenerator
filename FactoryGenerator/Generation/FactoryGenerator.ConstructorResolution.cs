@@ -34,27 +34,45 @@ namespace FactoryGenerator
 
         /// <summary>
         /// The outcome of resolving how an injection is constructed: the expression used to create
-        /// it, and any parameters it could not satisfy from the available interfaces (destined to
-        /// become externally-supplied constructor parameters of the generated container).
+        /// it, any parameters it could not satisfy from the available interfaces (destined to
+        /// become externally-supplied constructor parameters of the generated container), and the
+        /// chosen constructor's full parameter list.
         /// </summary>
+        /// <remarks>
+        /// <see cref="ConstructorParameters"/> exists purely so cycle-detection (<c>GetCycleDependencies</c>)
+        /// can reuse the exact constructor <see cref="ResolveInjection"/> already picked instead of
+        /// calling <see cref="GetBestConstructor"/> a second time for the same injection. It is
+        /// <see langword="null"/> for lambda-based injections (no constructor to choose).
+        /// </remarks>
         private readonly struct InjectionResolution
         {
-            public InjectionResolution(string creation, IEnumerable<ParameterData> missingParameters)
+            public InjectionResolution(string creation, IEnumerable<ParameterData> missingParameters, ImmutableArray<ParameterData>? constructorParameters)
             {
                 Creation = creation;
                 MissingParameters = missingParameters;
+                ConstructorParameters = constructorParameters;
             }
 
             public string Creation { get; }
             public IEnumerable<ParameterData> MissingParameters { get; }
+            public ImmutableArray<ParameterData>? ConstructorParameters { get; }
         }
 
         /// <summary>
-        /// Resolves the creation expression and missing parameters for an injection in a single pass.
-        /// This is computed once per injection and reused for both the container and lifetime-scope
-        /// declarations (and for constructor-parameter discovery), avoiding repeated constructor
-        /// selection/analysis for the same injection.
+        /// Resolves the creation expression, missing parameters, and chosen constructor for every
+        /// injection in a single pass. Computed once per <c>GenerateCode</c> run and reused by both
+        /// cycle-detection and the declarations loop, avoiding repeated constructor selection/analysis
+        /// for the same injection.
         /// </summary>
+        private static Dictionary<InjectionData, InjectionResolution> ResolveInjections(
+            IEnumerable<InjectionData> ordered, HashSet<string> availableInterfaceFullNames)
+        {
+            var resolutions = new Dictionary<InjectionData, InjectionResolution>();
+            foreach (var injection in ordered)
+                resolutions[injection] = ResolveInjection(injection, availableInterfaceFullNames);
+            return resolutions;
+        }
+
         private static InjectionResolution ResolveInjection(InjectionData injection, HashSet<string> availableInterfaceFullNames)
         {
             if (injection.Lambda is LambdaData lambda)
@@ -64,13 +82,13 @@ namespace FactoryGenerator
                         $"Could not find any [Inject]ed implementations of {lambda.ContainingTypeFullName} to use as the source for the injection of {lambda.ContainingTypeFullName}.{lambda.MemberName}. Please provide at least one injection of the type {lambda.ContainingTypeFullName}.");
 
                 if (!lambda.IsMethod)
-                    return new InjectionResolution($"{lambda.ContainingTypeMemberName}.{lambda.MemberName}", Enumerable.Empty<ParameterData>());
+                    return new InjectionResolution($"{lambda.ContainingTypeMemberName}.{lambda.MemberName}", Enumerable.Empty<ParameterData>(), null);
 
                 HashSet<ParameterData>? lambdaMissing = null;
                 HashSet<ParameterData>? lambdaNullableDefaults = null;
                 AnalyzeParameters(lambda.MethodParameters, availableInterfaceFullNames, ref lambdaMissing, ref lambdaNullableDefaults);
                 var lambdaCreation = $"{lambda.ContainingTypeMemberName}.{lambda.MemberName}{MakeMethodCall(lambda.MethodParameters, lambdaMissing, lambdaNullableDefaults)}";
-                return new InjectionResolution(lambdaCreation, (IEnumerable<ParameterData>?) lambdaMissing ?? Enumerable.Empty<ParameterData>());
+                return new InjectionResolution(lambdaCreation, (IEnumerable<ParameterData>?) lambdaMissing ?? Enumerable.Empty<ParameterData>(), null);
             }
 
             HashSet<ParameterData>? missing = null;
@@ -80,7 +98,7 @@ namespace FactoryGenerator
                 throw new Exception($"No Construction method for {injection.TypeFullName}. Lambda was null.");
 
             var creation = $"new {injection.TypeFullName}{MakeConstructorCall(ctor, missing, nullableDefaults)}";
-            return new InjectionResolution(creation, (IEnumerable<ParameterData>?) missing ?? Enumerable.Empty<ParameterData>());
+            return new InjectionResolution(creation, (IEnumerable<ParameterData>?) missing ?? Enumerable.Empty<ParameterData>(), ctor.Parameters);
         }
 
         private static ConstructorData? GetBestConstructor(InjectionData injection,
@@ -128,8 +146,11 @@ namespace FactoryGenerator
             ref HashSet<ParameterData>? nullableDefaults,
             out bool valid)
         {
-            var localMissing = new HashSet<ParameterData>();
-            var localNullableDefaults = new HashSet<ParameterData>();
+            // Allocated lazily: the overwhelmingly common case is a fully-satisfied constructor
+            // with zero missing/nullable-default parameters, so most calls should allocate neither
+            // HashSet at all instead of two unconditionally per candidate constructor tried.
+            HashSet<ParameterData>? localMissing = null;
+            HashSet<ParameterData>? localNullableDefaults = null;
             valid = true;
 
             foreach (var parameter in parameters)
@@ -140,7 +161,7 @@ namespace FactoryGenerator
 
                 if (parameter.IsCollection)
                 {
-                    localMissing.Add(parameter);
+                    (localMissing ??= new HashSet<ParameterData>()).Add(parameter);
                     continue;
                 }
 
@@ -152,16 +173,18 @@ namespace FactoryGenerator
 
                 if (parameter.IsNullable)
                 {
-                    localNullableDefaults.Add(parameter);
+                    (localNullableDefaults ??= new HashSet<ParameterData>()).Add(parameter);
                     continue;
                 }
 
                 valid = false;
-                localMissing.Add(parameter);
+                (localMissing ??= new HashSet<ParameterData>()).Add(parameter);
             }
 
-            missing = localMissing.Count > 0 ? localMissing : null;
-            nullableDefaults = localNullableDefaults.Count > 0 ? localNullableDefaults : null;
+            // A HashSet is only ever allocated above when something is actually added to it, so
+            // "allocated" already implies non-empty — no need to re-check .Count here.
+            missing = localMissing;
+            nullableDefaults = localNullableDefaults;
         }
 
         private static string MakeConstructorCall(ConstructorData ctor, HashSet<ParameterData>? missing, HashSet<ParameterData>? nullableDefaults)

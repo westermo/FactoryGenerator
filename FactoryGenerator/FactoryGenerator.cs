@@ -30,14 +30,22 @@ namespace FactoryGenerator
             var rest = scanScopes.SelectMany(FindMethods);
             var attributes = rest.Collect();
             var compilation = context.CompilationProvider;
-            var combined = attributes.Combine(compilation).Combine(logProvider);
+
+            // Ordering + interface-indexing is identical work for both consumers below (the
+            // dictionary-based container and the static-extensions generator). Computing it once
+            // here means it's derived exactly once per compilation instead of once per consumer —
+            // see InjectionAnalysis/BuildInjectionAnalysis in FactoryGenerator.InjectionOrdering.cs.
+            var analysis = attributes.Combine(compilation)
+                .Select(static (pair, token) => BuildInjectionAnalysis(pair.Left, pair.Right, token));
+
+            var combined = analysis.Combine(compilation).Combine(logProvider);
             context.RegisterSourceOutput(combined, MakeAutofacModule);
 
             var supportsStaticExtensions = context.ParseOptionsProvider.Select(IsAtLeastCSharp14);
             var emitStaticExtensions = context.AnalyzerConfigOptionsProvider.Select(GetEmitStaticExtensions);
             var staticExtensionsEnabled = supportsStaticExtensions.Combine(emitStaticExtensions)
                 .Select(static (pair, _) => pair.Left && pair.Right);
-            var extensionData = attributes.Combine(compilation).Combine(staticExtensionsEnabled);
+            var extensionData = analysis.Combine(compilation).Combine(staticExtensionsEnabled);
             context.RegisterSourceOutput(extensionData, MakeStaticExtensions);
         }
 
@@ -59,13 +67,16 @@ namespace FactoryGenerator
         }
 
         private void MakeAutofacModule(SourceProductionContext context,
-                                       ((ImmutableArray<InjectionData> Injections, Compilation Compilation) Left, LoggingOptions? log) data)
+                                       ((InjectionAnalysis Analysis, Compilation Compilation) Left, LoggingOptions? log) data)
         {
-            var injections = data.Left.Injections;
+            var analysis = data.Left.Analysis;
             var compilation = data.Left.Compilation;
             var log = data.log?.FileName == null ? NullLogger.Instance : new Logger(data.log.FileName, data.log.LogLevel);
 
-            GenerateCode(injections, compilation, log, context);
+            foreach (var injection in analysis.Ordered)
+                log.Log(LogLevel.Debug, $"Traversing {injection.Name} from {injection.AssemblyName} with priority {injection.AssemblyPriority}");
+
+            GenerateCode(analysis, compilation, log, context);
         }
 
         private const string ClassName = "DependencyInjectionContainer";

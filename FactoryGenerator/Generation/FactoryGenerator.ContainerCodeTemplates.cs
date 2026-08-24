@@ -20,13 +20,18 @@ namespace FactoryGenerator
     /// </summary>
     public partial class FactoryGenerator
     {
-        private static void GenerateCode(ImmutableArray<InjectionData> dataInjections, Compilation compilation, ILogger log, SourceProductionContext context)
+        private static void GenerateCode(InjectionAnalysis analysis, Compilation compilation, ILogger log, SourceProductionContext context)
         {
-            var ordered = OrderInjections(dataInjections, compilation, log);
-            var (interfaceInjectors, interfaceMemberNames) = BuildInterfaceInjectors(ordered);
-            var availableInterfaceFullNames = new HashSet<string>(interfaceInjectors.Keys);
+            var ordered = analysis.Ordered;
+            var interfaceInjectors = analysis.InterfaceInjectors;
+            var interfaceMemberNames = analysis.InterfaceMemberNames;
+            var availableInterfaceFullNames = analysis.AvailableInterfaceFullNames;
 
-            CheckForCycles(interfaceInjectors, availableInterfaceFullNames);
+            // Computed once and reused by both cycle-detection and the declarations loop below,
+            // instead of each independently re-selecting a constructor/lambda member per injection.
+            var resolutions = ResolveInjections(ordered, availableInterfaceFullNames);
+
+            CheckForCycles(interfaceInjectors, availableInterfaceFullNames, resolutions);
             log.Log(LogLevel.Debug, "Starting Code Generation");
             var usingStatements = $@"
 using System;
@@ -221,7 +226,7 @@ public partial class {ClassName} : IContainer, IContainerScopeFactory, IContaine
 }}";
             context.AddSource($"FactoryGenerator.{ClassName}/Lookup.g.cs", lookup);
 
-            var booleanKeys = dataInjections.Select(inj => inj.BooleanInjection)
+            var booleanKeys = analysis.RawInjections.Select(inj => inj.BooleanInjection)
                                             .Where(b => b is not null)
                                             .Select(b => b!.Key)
                                             .Distinct()
@@ -233,7 +238,7 @@ public partial class {ClassName} : IContainer, IContainerScopeFactory, IContaine
 
             foreach (var injection in ordered)
             {
-                var resolution = ResolveInjection(injection, availableInterfaceFullNames);
+                var resolution = resolutions[injection];
                 declarations[injection.Name] = Declaration(injection, resolution.Creation);
 
                 foreach (var param in resolution.MissingParameters)
@@ -244,21 +249,30 @@ public partial class {ClassName} : IContainer, IContainerScopeFactory, IContaine
                 }
             }
 
+            // A single partitioning pass instead of two ToArray()+List.Remove() loops: each Remove()
+            // is an O(n) scan of its own, so removing k matches from an n-item list cost O(n*k) for
+            // no reason. Order matters here — a collection-typed parameter is classified as
+            // "localized" before the IContainer/self check even runs, matching the original two-pass
+            // precedence (a parameter can't reach the IContainer check once collection-classified).
+            var externalParameterCandidates = constructorParameters;
+            constructorParameters = new List<ParameterData>(externalParameterCandidates.Count);
             var localizedParameters = new List<ParameterData>();
-            foreach (var parameter in constructorParameters.ToArray())
+            foreach (var parameter in externalParameterCandidates)
             {
-                if (!parameter.IsCollection) continue;
-                if (parameter.CollectionElementFullName is null) continue;
-                constructorParameters.Remove(parameter);
-                localizedParameters.Add(parameter);
-            }
+                if (parameter.IsCollection && parameter.CollectionElementFullName is not null)
+                {
+                    localizedParameters.Add(parameter);
+                    continue;
+                }
 
-            foreach (var parameter in constructorParameters.ToArray())
-            {
-                if (!parameter.TypeFullName.Contains("IContainer")) continue;
-                log.Log(LogLevel.Debug, $"Registering {parameter.Name} as Self");
-                declarations[parameter.Name] = $"private IContainer {parameter.Name} => this;";
-                constructorParameters.Remove(parameter);
+                if (parameter.TypeFullName.Contains("IContainer"))
+                {
+                    log.Log(LogLevel.Debug, $"Registering {parameter.Name} as Self");
+                    declarations[parameter.Name] = $"private IContainer {parameter.Name} => this;";
+                    continue;
+                }
+
+                constructorParameters.Add(parameter);
             }
 
             ValidateExternalParameterTypes(constructorParameters);

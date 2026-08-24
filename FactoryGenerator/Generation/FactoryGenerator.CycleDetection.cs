@@ -43,7 +43,7 @@ namespace FactoryGenerator
             return reachable;
         }
 
-        private static IEnumerable<string> GetCycleDependencies(InjectionData injection, HashSet<string> availableInterfaceFullNames)
+        private static IEnumerable<string> GetCycleDependencies(InjectionData injection, InjectionResolution resolution, HashSet<string> availableInterfaceFullNames)
         {
             if (injection.Lambda is LambdaData lambda)
             {
@@ -59,13 +59,10 @@ namespace FactoryGenerator
                 yield break;
             }
 
-            HashSet<ParameterData>? missing = null;
-            HashSet<ParameterData>? nullableDefaults = null;
-            var ctor = GetBestConstructor(injection, availableInterfaceFullNames, ref missing, ref nullableDefaults);
-            if (ctor is null)
+            if (resolution.ConstructorParameters is not { } parameters)
                 yield break;
 
-            foreach (var dependency in GetParameterDependencies(ctor.Parameters, availableInterfaceFullNames))
+            foreach (var dependency in GetParameterDependencies(parameters, availableInterfaceFullNames))
                 yield return dependency;
         }
 
@@ -89,10 +86,13 @@ namespace FactoryGenerator
         }
 
 
-        private static void CheckForCycles(Dictionary<string, List<InjectionData>> interfaceInjectors, HashSet<string> availableInterfaceFullNames)
+        private static void CheckForCycles(
+            Dictionary<string, List<InjectionData>> interfaceInjectors,
+            HashSet<string> availableInterfaceFullNames,
+            IReadOnlyDictionary<InjectionData, InjectionResolution> resolutions)
         {
             var graph = new Dictionary<string, HashSet<string>>();
-            var nodeOwner = new Dictionary<string, string>();
+            var nodeOwner = new Dictionary<string, List<InjectionData>>();
 
             foreach (var interfaceInjector in interfaceInjectors)
             {
@@ -103,12 +103,12 @@ namespace FactoryGenerator
 
                 foreach (var injection in reachable)
                 {
-                    foreach (var dep in GetCycleDependencies(injection, availableInterfaceFullNames))
+                    foreach (var dep in GetCycleDependencies(injection, resolutions[injection], availableInterfaceFullNames))
                         deps.Add(dep);
                 }
 
                 graph[ifaceName] = deps;
-                nodeOwner[ifaceName] = string.Join(", ", reachable.Select(injection => injection.TypeFullName).Distinct());
+                nodeOwner[ifaceName] = reachable;
             }
 
             var state = new Dictionary<string, int>();
@@ -123,7 +123,7 @@ namespace FactoryGenerator
 
         private static void DfsCycleCheck(string node, Dictionary<string, HashSet<string>> graph,
                                           Dictionary<string, int> state, List<string> path,
-                                          Dictionary<string, string> nodeOwner)
+                                          Dictionary<string, List<InjectionData>> nodeOwner)
         {
             state[node] = 1; // in-progress
             path.Add(node);
@@ -135,13 +135,15 @@ namespace FactoryGenerator
                     state.TryGetValue(dep, out var depState);
                     if (depState == 1)
                     {
-                        // Back-edge found — extract the cycle
+                        // Back-edge found — extract the cycle. The owner description is only ever
+                        // needed here, on the rare path where a cycle actually exists, so it's built
+                        // lazily instead of unconditionally for every interface on every run.
                         var cycleStart = path.IndexOf(dep);
                         var cycle = path.GetRange(cycleStart, path.Count - cycleStart);
                         cycle.Add(dep);
-                        string owner;
-                        if (!nodeOwner.TryGetValue(node, out owner))
-                            owner = node;
+                        var owner = nodeOwner.TryGetValue(node, out var reachable)
+                            ? string.Join(", ", reachable.Select(injection => injection.TypeFullName).Distinct())
+                            : node;
                         throw new InvalidOperationException(
                             $"Cyclic Dependency Detected: {string.Join(" \u2192 ", cycle)} (via {owner})");
                     }

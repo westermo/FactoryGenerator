@@ -16,6 +16,7 @@ namespace Benchmarks;
 public class GeneratorBenchmarks
 {
     private ColdGeneratorScenario m_constructorGraph = null!;
+    private ColdGeneratorScenario m_constructorGraphWithStaticExtensions = null!;
     private ColdGeneratorScenario m_noiseHeavyProject = null!;
     private ColdGeneratorScenario m_featureRichStaticExtensionsDisabled = null!;
     private ColdGeneratorScenario m_featureRichStaticExtensionsEnabled = null!;
@@ -27,6 +28,7 @@ public class GeneratorBenchmarks
     public void Setup()
     {
         m_constructorGraph = GeneratorBenchmarkScenarioFactory.CreateConstructorGraph(serviceCount: 250);
+        m_constructorGraphWithStaticExtensions = GeneratorBenchmarkScenarioFactory.CreateConstructorGraphWithStaticExtensions(serviceCount: 250);
         m_noiseHeavyProject = GeneratorBenchmarkScenarioFactory.CreateNoiseHeavyProject(serviceCount: 64, noiseTypeCount: 2000);
         m_featureRichStaticExtensionsDisabled = GeneratorBenchmarkScenarioFactory.CreateFeatureRichGraph(emitStaticExtensions: false);
         m_featureRichStaticExtensionsEnabled = GeneratorBenchmarkScenarioFactory.CreateFeatureRichGraph(emitStaticExtensions: true);
@@ -35,6 +37,7 @@ public class GeneratorBenchmarks
         m_referenceAssemblyIncremental = GeneratorBenchmarkScenarioFactory.CreateReferenceAssemblyIncrementalScenario();
 
         GeneratorBenchmarkHarness.Validate(m_constructorGraph);
+        GeneratorBenchmarkHarness.Validate(m_constructorGraphWithStaticExtensions);
         GeneratorBenchmarkHarness.Validate(m_noiseHeavyProject);
         GeneratorBenchmarkHarness.Validate(m_featureRichStaticExtensionsDisabled);
         GeneratorBenchmarkHarness.Validate(m_featureRichStaticExtensionsEnabled);
@@ -43,6 +46,15 @@ public class GeneratorBenchmarks
 
     [Benchmark]
     public int Cold_ConstructorGraph() => GeneratorBenchmarkHarness.RunCold(m_constructorGraph);
+
+    /// <summary>
+    /// Same 250-service linear dependency chain as <see cref="Cold_ConstructorGraph"/>, but with
+    /// static extensions enabled — isolates PropagateStaticExtensionRequirements's fixed-point-loop
+    /// cost (a hypothesized, previously-untested scaling risk for long chains) from the ordinary
+    /// per-injection processing cost already captured by Cold_ConstructorGraph.
+    /// </summary>
+    [Benchmark]
+    public int Cold_ConstructorGraph_StaticExtensionsEnabled() => GeneratorBenchmarkHarness.RunCold(m_constructorGraphWithStaticExtensions);
 
     [Benchmark]
     public int Cold_NoiseHeavyProject() => GeneratorBenchmarkHarness.RunCold(m_noiseHeavyProject);
@@ -164,6 +176,22 @@ internal static class GeneratorBenchmarkScenarioFactory
             new BenchmarkSourceDocument("ConstructorGraph.cs", BuildConstructorGraphSource("GeneratorConstructorGraphInput", serviceCount)));
 
         return new ColdGeneratorScenario(compilation, s_staticExtensionsDisabledOptions);
+    }
+
+    /// <summary>
+    /// Same long linear dependency chain as <see cref="CreateConstructorGraph"/>, but with static
+    /// extensions enabled. Exists to directly measure whether
+    /// <c>PropagateStaticExtensionRequirements</c>'s fixed-point loop (which can take one iteration
+    /// per hop of a dependency chain to converge) scales poorly with chain length, rather than
+    /// leaving that as an untested hypothesis.
+    /// </summary>
+    public static ColdGeneratorScenario CreateConstructorGraphWithStaticExtensions(int serviceCount)
+    {
+        var compilation = CreateCompilation(
+            "GeneratorConstructorGraphStaticExtensionsBenchmarks",
+            new BenchmarkSourceDocument("ConstructorGraph.cs", BuildConstructorGraphSource("GeneratorConstructorGraphStaticExtensionsInput", serviceCount)));
+
+        return new ColdGeneratorScenario(compilation, s_staticExtensionsEnabledOptions);
     }
 
     public static ColdGeneratorScenario CreateNoiseHeavyProject(int serviceCount, int noiseTypeCount)

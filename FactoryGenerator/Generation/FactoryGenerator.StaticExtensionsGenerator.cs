@@ -67,18 +67,23 @@ namespace FactoryGenerator
 
         private static void MakeStaticExtensions(
             SourceProductionContext context,
-            ((ImmutableArray<InjectionData> Injections, Compilation Compilation) Left, bool SupportsExtensions) data)
+            ((InjectionAnalysis Analysis, Compilation Compilation) Left, bool SupportsExtensions) data)
         {
             if (!data.SupportsExtensions) return;
-            GenerateStaticExtensions(data.Left.Injections, data.Left.Compilation, context);
+            GenerateStaticExtensions(data.Left.Analysis, data.Left.Compilation, context);
         }
 
-        private static void GenerateStaticExtensions(ImmutableArray<InjectionData> dataInjections, Compilation compilation, SourceProductionContext context)
+        private static void GenerateStaticExtensions(InjectionAnalysis analysis, Compilation compilation, SourceProductionContext context)
         {
-            var ordered = OrderInjections(dataInjections, compilation);
-            var (interfaceInjectors, interfaceMemberNames) = BuildInterfaceInjectors(ordered);
-            var availableInterfaces = new HashSet<string>(interfaceInjectors.Keys);
-            var specs = BuildStaticExtensionSpecs(interfaceInjectors, interfaceMemberNames, availableInterfaces);
+            var interfaceInjectors = analysis.InterfaceInjectors;
+            var interfaceMemberNames = analysis.InterfaceMemberNames;
+            var availableInterfaces = analysis.AvailableInterfaceFullNames;
+
+            // Shared across spec-building (PopulateStaticExtensionDirectRequirements) and code
+            // emission (BuildStaticCreateExpression) below, so each injection's constructor is
+            // selected once instead of twice — see GetCachedBestConstructor.
+            var constructorCache = new Dictionary<InjectionData, ConstructorData?>();
+            var specs = BuildStaticExtensionSpecs(interfaceInjectors, interfaceMemberNames, availableInterfaces, constructorCache);
 
             var reservedNames = BuildStaticExtensionReservedNames(specs, interfaceMemberNames);
             var externalIdentifiers = BuildExternalParameterIdentifiers(specs.Values.SelectMany(spec => spec.ExternalParameters), reservedNames);
@@ -118,7 +123,7 @@ namespace FactoryGenerator
             foreach (var ifaceFull in interfaceMemberNames.Keys)
             {
                 var spec = specs[ifaceFull];
-                var helpers = BuildStaticExtensionClass(spec, specs, availableInterfaces, booleanIdentifiers, externalIdentifiers);
+                var helpers = BuildStaticExtensionClass(spec, specs, availableInterfaces, booleanIdentifiers, externalIdentifiers, constructorCache);
 
                 context.AddSource($"FactoryGenerator.StaticExtensions/{spec.ExtensionClassName}.g.cs",
                                   $$"""
@@ -139,11 +144,12 @@ namespace FactoryGenerator
         private static Dictionary<string, StaticExtensionSpec> BuildStaticExtensionSpecs(
             Dictionary<string, List<InjectionData>> interfaceInjectors,
             Dictionary<string, string> interfaceMemberNames,
-            HashSet<string> availableInterfaces)
+            HashSet<string> availableInterfaces,
+            Dictionary<InjectionData, ConstructorData?> constructorCache)
         {
             var specs = interfaceInjectors.ToDictionary(
                 pair => pair.Key,
-                pair => CreateDirectStaticExtensionSpec(pair.Key, pair.Value, interfaceMemberNames[pair.Key], availableInterfaces, interfaceInjectors),
+                pair => CreateDirectStaticExtensionSpec(pair.Key, pair.Value, interfaceMemberNames[pair.Key], availableInterfaces, interfaceInjectors, constructorCache),
                 StringComparer.Ordinal);
 
             PropagateStaticExtensionRequirements(specs);
@@ -169,17 +175,19 @@ namespace FactoryGenerator
             List<InjectionData> possibilities,
             string typeMemberName,
             HashSet<string> availableInterfaces,
-            Dictionary<string, List<InjectionData>> interfaceInjectors)
+            Dictionary<string, List<InjectionData>> interfaceInjectors,
+            Dictionary<InjectionData, ConstructorData?> constructorCache)
         {
             var spec = new StaticExtensionSpec(typeFullName, typeMemberName, typeMemberName + "Extensions", possibilities);
-            PopulateStaticExtensionDirectRequirements(spec, availableInterfaces, interfaceInjectors);
+            PopulateStaticExtensionDirectRequirements(spec, availableInterfaces, interfaceInjectors, constructorCache);
             return spec;
         }
 
         private static void PopulateStaticExtensionDirectRequirements(
             StaticExtensionSpec spec,
             HashSet<string> availableInterfaces,
-            Dictionary<string, List<InjectionData>> interfaceInjectors)
+            Dictionary<string, List<InjectionData>> interfaceInjectors,
+            Dictionary<InjectionData, ConstructorData?> constructorCache)
         {
             foreach (var booleanKey in spec.Possibilities.Select(possibility => possibility.BooleanInjection?.Key).OfType<string>())
                 AddDistinctString(spec.BooleanKeys, booleanKey);
@@ -197,9 +205,7 @@ namespace FactoryGenerator
                     continue;
                 }
 
-                HashSet<ParameterData>? missing = null;
-                HashSet<ParameterData>? nullableDefaults = null;
-                var constructor = GetBestConstructor(possibility, availableInterfaces, ref missing, ref nullableDefaults);
+                var constructor = GetCachedBestConstructor(possibility, availableInterfaces, constructorCache);
                 if (constructor is null)
                     continue;
 
@@ -319,7 +325,8 @@ namespace FactoryGenerator
             IReadOnlyDictionary<string, StaticExtensionSpec> specs,
             HashSet<string> availableInterfaces,
             IReadOnlyDictionary<string, string> booleanIdentifiers,
-            IReadOnlyDictionary<string, string> externalIdentifiers)
+            IReadOnlyDictionary<string, string> externalIdentifiers,
+            Dictionary<InjectionData, ConstructorData?> constructorCache)
         {
             var parts = new List<string>
             {
@@ -330,7 +337,7 @@ namespace FactoryGenerator
             foreach (var possibility in spec.Possibilities)
             {
                 parts.Add(BuildStaticResolveInjectionMethod(spec, possibility, booleanIdentifiers, externalIdentifiers));
-                parts.Add(BuildStaticCreateInjectionMethod(spec, possibility, specs, availableInterfaces, booleanIdentifiers, externalIdentifiers));
+                parts.Add(BuildStaticCreateInjectionMethod(spec, possibility, specs, availableInterfaces, booleanIdentifiers, externalIdentifiers, constructorCache));
             }
 
             return string.Join("\n\n", parts);
@@ -528,11 +535,12 @@ namespace FactoryGenerator
             IReadOnlyDictionary<string, StaticExtensionSpec> specs,
             HashSet<string> availableInterfaces,
             IReadOnlyDictionary<string, string> booleanIdentifiers,
-            IReadOnlyDictionary<string, string> externalIdentifiers)
+            IReadOnlyDictionary<string, string> externalIdentifiers,
+            Dictionary<InjectionData, ConstructorData?> constructorCache)
         {
             var helperName = GetStaticInjectionHelperName(injection);
             var parameterList = BuildStaticMethodParameterList(spec, booleanIdentifiers, externalIdentifiers, includeContainer: true, includeState: true);
-            var createExpression = BuildStaticCreateExpression(injection, specs, availableInterfaces, booleanIdentifiers, externalIdentifiers);
+            var createExpression = BuildStaticCreateExpression(injection, specs, availableInterfaces, booleanIdentifiers, externalIdentifiers, constructorCache);
             var returnStatement = createExpression.StartsWith("throw ", StringComparison.Ordinal)
                                       ? createExpression + ";"
                                       : "return " + createExpression + ";";
@@ -543,12 +551,40 @@ namespace FactoryGenerator
     }}";
         }
 
+        /// <summary>
+        /// Looks up (or computes and caches) the best constructor for an injection. The
+        /// static-extensions pipeline needs this exact same, deterministic choice twice — once while
+        /// building each interface's <see cref="StaticExtensionSpec"/> (to discover its
+        /// external-parameter/boolean/dependency requirements, see
+        /// <see cref="PopulateStaticExtensionDirectRequirements"/>) and again while emitting the
+        /// <c>Create_X</c> method body (<see cref="BuildStaticCreateExpression"/>) — caching it here
+        /// avoids re-running <see cref="GetBestConstructor"/>'s per-constructor parameter analysis a
+        /// second time for the same injection. <c>missing</c>/<c>nullableDefaults</c> are unused by
+        /// either static-extensions call site (both only need the chosen constructor's parameter
+        /// list), so they aren't cached.
+        /// </summary>
+        private static ConstructorData? GetCachedBestConstructor(
+            InjectionData injection,
+            HashSet<string> availableInterfaces,
+            Dictionary<InjectionData, ConstructorData?> constructorCache)
+        {
+            if (constructorCache.TryGetValue(injection, out var cached))
+                return cached;
+
+            HashSet<ParameterData>? missing = null;
+            HashSet<ParameterData>? nullableDefaults = null;
+            var chosen = GetBestConstructor(injection, availableInterfaces, ref missing, ref nullableDefaults);
+            constructorCache[injection] = chosen;
+            return chosen;
+        }
+
         private static string BuildStaticCreateExpression(
             InjectionData injection,
             IReadOnlyDictionary<string, StaticExtensionSpec> specs,
             HashSet<string> availableInterfaces,
             IReadOnlyDictionary<string, string> booleanIdentifiers,
-            IReadOnlyDictionary<string, string> externalIdentifiers)
+            IReadOnlyDictionary<string, string> externalIdentifiers,
+            Dictionary<InjectionData, ConstructorData?> constructorCache)
         {
             if (injection.Lambda is LambdaData lambda)
             {
@@ -563,9 +599,7 @@ namespace FactoryGenerator
                 return $"{containingInvocation}.{lambda.MemberName}({lambdaArguments})";
             }
 
-            HashSet<ParameterData>? missing = null;
-            HashSet<ParameterData>? nullableDefaults = null;
-            var constructor = GetBestConstructor(injection, availableInterfaces, ref missing, ref nullableDefaults);
+            var constructor = GetCachedBestConstructor(injection, availableInterfaces, constructorCache);
             if (constructor is null)
                 return BuildMissingImplementationExpression(injection.TypeFullName);
 
