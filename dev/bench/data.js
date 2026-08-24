@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787585388282,
+  "lastUpdate": 1787585391756,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -1262,6 +1262,102 @@ window.BENCHMARK_DATA = {
             "value": 844395.4820667614,
             "unit": "ns",
             "range": "± 4780.741739349164"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "213e5a7e138cd0bc559aa535b0aa88c4e05afffa",
+          "message": "Merge pull request #30 from westermo/perf\n\nFix: generator crash when external constructor parameter names differ only by case",
+          "timestamp": "2026-08-24T17:17:03+02:00",
+          "tree_id": "d40b393267cb6f008faffad58dcc3429b6e8a361",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/213e5a7e138cd0bc559aa535b0aa88c4e05afffa"
+        },
+        "date": 1787585391740,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph",
+            "value": 8781904.669791667,
+            "unit": "ns",
+            "range": "± 77398.81611666146"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph_StaticExtensionsEnabled",
+            "value": 13406017.707589285,
+            "unit": "ns",
+            "range": "± 81636.37004566539"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_NoiseHeavyProject",
+            "value": 2563829.6983695654,
+            "unit": "ns",
+            "range": "± 45876.054876496586"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsDisabled",
+            "value": 802628.6255580357,
+            "unit": "ns",
+            "range": "± 6182.99892197898"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsEnabled",
+            "value": 862471.2532552084,
+            "unit": "ns",
+            "range": "± 162584.75010497772"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_MultiAssemblyOverrideGraph",
+            "value": 5223765.196428572,
+            "unit": "ns",
+            "range": "± 67395.69439991475"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ManyAssembliesGraph",
+            "value": 1844855.111049107,
+            "unit": "ns",
+            "range": "± 14250.727831614831"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_NoOpRerun",
+            "value": 89285.5606282552,
+            "unit": "ns",
+            "range": "± 35125.62156637945"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_UnrelatedEdit",
+            "value": 962603.40625,
+            "unit": "ns",
+            "range": "± 8454.09750445852"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_InjectedSignatureEdit",
+            "value": 1007517.7470703125,
+            "unit": "ns",
+            "range": "± 8502.293371107862"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_AddInjection",
+            "value": 901300.4346354167,
+            "unit": "ns",
+            "range": "± 133540.5947335408"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_ReferenceAssemblyChange",
+            "value": 777381.6848958334,
+            "unit": "ns",
+            "range": "± 128029.14729398263"
           }
         ]
       }
