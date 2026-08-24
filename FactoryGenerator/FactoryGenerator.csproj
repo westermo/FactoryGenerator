@@ -7,6 +7,23 @@
         <Nullable>enable</Nullable>
         <IncludeBuildOutput>false</IncludeBuildOutput>
         <SuppressDependenciesWhenPacking>true</SuppressDependenciesWhenPacking>
+        <!--
+        Marks this package as a build-time-only/analyzer dependency. Without this, NuGet has no
+        signal that FactoryGenerator's analyzer reference should stop at the directly-referencing
+        project: a project that only transitively depends on FactoryGenerator (e.g. via a
+        ProjectReference to another library that itself references this package) would ALSO get
+        the FactoryGenerator analyzer registered, on top of that project's own direct reference —
+        two separate <Analyzer> items loading the same generator type for one compilation. Roslyn
+        does not deduplicate across such items, so both instances independently try to add the
+        same generated-source hint names (e.g. "FactoryGenerator.Declarations/{member}.g.cs"),
+        and the second AddSource call throws ArgumentException("...must be unique within a
+        generator"), aborting the whole generator run for that compilation with zero output.
+        DevelopmentDependency=true is the standard, documented fix for Roslyn analyzer/source
+        generator NuGet packages (see: "How to create a NuGet package with a Roslyn analyzer") —
+        it stops the package from flowing to a referencing project's own downstream consumers,
+        regardless of whether that referencing project explicitly sets PrivateAssets.
+        -->
+        <DevelopmentDependency>true</DevelopmentDependency>
     </PropertyGroup>
 
     <ItemGroup>
