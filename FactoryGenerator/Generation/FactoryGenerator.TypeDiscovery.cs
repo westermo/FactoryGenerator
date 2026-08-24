@@ -61,12 +61,18 @@ namespace FactoryGenerator
         private static ImmutableArray<IAssemblySymbol> GetRelevantAssemblies(Compilation compilation, CancellationToken token)
         {
             var allReachableAssemblies = new HashSet<IAssemblySymbol>(SymbolEqualityComparer.Default) { compilation.Assembly };
+            // Captured once per assembly during the BFS below and reused by CanReachAttributesAssembly,
+            // instead of calling GetReferencedAssemblies a second time per assembly during that check.
+            var references = new Dictionary<IAssemblySymbol, IAssemblySymbol[]>(SymbolEqualityComparer.Default);
             var toVisit = new Queue<IAssemblySymbol>();
             toVisit.Enqueue(compilation.Assembly);
             while (toVisit.Count > 0)
             {
                 token.ThrowIfCancellationRequested();
-                foreach (var referenced in GetReferencedAssemblies(toVisit.Dequeue()))
+                var current = toVisit.Dequeue();
+                var directReferences = GetReferencedAssemblies(current).ToArray();
+                references[current] = directReferences;
+                foreach (var referenced in directReferences)
                 {
                     if (allReachableAssemblies.Add(referenced))
                         toVisit.Enqueue(referenced);
@@ -88,7 +94,7 @@ namespace FactoryGenerator
                 if (Array.IndexOf(attributesAssemblies, assembly) >= 0)
                     return canReachAttributes[assembly] = true;
 
-                foreach (var referenced in GetReferencedAssemblies(assembly))
+                foreach (var referenced in references[assembly])
                 {
                     if (CanReachAttributesAssembly(referenced))
                         return canReachAttributes[assembly] = true;
@@ -126,38 +132,87 @@ namespace FactoryGenerator
             {
                 token.ThrowIfCancellationRequested();
                 if (type.TypeKind != TypeKind.Class && type.TypeKind != TypeKind.Interface) continue;
-                var typeAttributes = type.GetAttributes().Concat(type.AllInterfaces.SelectMany(i => i.GetAttributes()))
-                                         .ToImmutableArray();
-                if (typeAttributes.Any(IsInjection))
+
+                // Cheap, allocation-free match check first: the vast majority of scanned types have
+                // no FactoryGenerator attribute at all (directly or via an implemented interface), so
+                // avoid building the concatenated attribute array (Concat + ToImmutableArray) unless
+                // the type actually matches.
+                if (HasInjectionAttribute(type))
                 {
+                    var typeAttributes = type.GetAttributes().Concat(type.AllInterfaces.SelectMany(i => i.GetAttributes()))
+                                             .ToImmutableArray();
                     var info = Injection.Create(type, typeAttributes, token);
                     if (info is not null) yield return info;
                 }
 
-                foreach (var method in type.GetMembers().OfType<IMethodSymbol>()
-                                           .Where(method => method.DeclaredAccessibility == Accessibility.Public))
+                // Single pass over the member list instead of two separate GetMembers().OfType<>().Where()
+                // LINQ chains. Matches are buffered per member kind and yielded methods-then-properties
+                // below to preserve today's exact discovery order (positional boolean constructor
+                // parameters depend on it).
+                List<(IMethodSymbol Method, ImmutableArray<AttributeData> Attributes)>? methodMatches = null;
+                List<(IPropertySymbol Property, ImmutableArray<AttributeData> Attributes)>? propertyMatches = null;
+                foreach (var member in type.GetMembers())
                 {
-                    var attributes = method.GetAttributes();
-                    if (!attributes.Any(IsInjection))
-                        continue;
-                    var info = Injection.Create(method, attributes, token);
-                    if (info is not null) yield return info;
+                    if (member.DeclaredAccessibility != Accessibility.Public) continue;
+                    switch (member)
+                    {
+                        case IMethodSymbol method:
+                        {
+                            var attributes = method.GetAttributes();
+                            if (attributes.Any(IsInjection))
+                                (methodMatches ??= new List<(IMethodSymbol, ImmutableArray<AttributeData>)>()).Add((method, attributes));
+                            break;
+                        }
+                        case IPropertySymbol property:
+                        {
+                            var attributes = property.GetAttributes();
+                            if (attributes.Any(IsInjection))
+                                (propertyMatches ??= new List<(IPropertySymbol, ImmutableArray<AttributeData>)>()).Add((property, attributes));
+                            break;
+                        }
+                    }
                 }
 
-                foreach (var property in type.GetMembers().OfType<IPropertySymbol>()
-                                             .Where(property => property.DeclaredAccessibility == Accessibility.Public))
+                if (methodMatches is not null)
                 {
-                    var attributes = property.GetAttributes();
-                    if (!attributes.Any(IsInjection))
-                        continue;
-                    var info = Injection.Create(property, attributes, token);
-                    if (info is not null) yield return info;
+                    foreach (var (method, attributes) in methodMatches)
+                    {
+                        var info = Injection.Create(method, attributes, token);
+                        if (info is not null) yield return info;
+                    }
+                }
+
+                if (propertyMatches is not null)
+                {
+                    foreach (var (property, attributes) in propertyMatches)
+                    {
+                        var info = Injection.Create(property, attributes, token);
+                        if (info is not null) yield return info;
+                    }
                 }
             }
 
             bool IsInjection(AttributeData attribute)
             {
                 return attribute.AttributeClass?.Name.Contains("Inject") == true && attribute.AttributeClass.ToString().StartsWith("FactoryGenerator.Attributes");
+            }
+
+            bool HasInjectionAttribute(INamedTypeSymbol type)
+            {
+                foreach (var attribute in type.GetAttributes())
+                {
+                    if (IsInjection(attribute)) return true;
+                }
+
+                foreach (var iface in type.AllInterfaces)
+                {
+                    foreach (var attribute in iface.GetAttributes())
+                    {
+                        if (IsInjection(attribute)) return true;
+                    }
+                }
+
+                return false;
             }
         }
     }

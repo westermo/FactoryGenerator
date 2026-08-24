@@ -30,23 +30,14 @@ namespace FactoryGenerator
 
         public static IEnumerable<INamedTypeSymbol> GetAllTypes(INamedTypeSymbol root)
         {
-            foreach (var namespaceOrTypeSymbol in root.GetMembers())
+            // GetTypeMembers() returns only nested types, unlike GetMembers() which would force
+            // materializing every field/method/property/event of `root` just to filter them back out.
+            // The vast majority of scanned types have zero nested types, so this avoids real work.
+            foreach (var type in root.GetTypeMembers())
             {
-                switch (namespaceOrTypeSymbol)
-                {
-                    case INamespaceSymbol @namespace:
-                    {
-                        foreach (var nested in GetAllTypes(@namespace))
-                            yield return nested;
-                        break;
-                    }
-                    case INamedTypeSymbol type:
-
-                        foreach (var nested in GetAllTypes(type))
-                            yield return nested;
-                        yield return type;
-                        break;
-                }
+                foreach (var nested in GetAllTypes(type))
+                    yield return nested;
+                yield return type;
             }
         }
 

@@ -21,6 +21,7 @@ public class GeneratorBenchmarks
     private ColdGeneratorScenario m_featureRichStaticExtensionsDisabled = null!;
     private ColdGeneratorScenario m_featureRichStaticExtensionsEnabled = null!;
     private ColdGeneratorScenario m_multiAssemblyOverrideGraph = null!;
+    private ColdGeneratorScenario m_manyAssembliesGraph = null!;
     private FeatureRichIncrementalScenario m_featureRichIncremental = null!;
     private IncrementalGeneratorScenario m_referenceAssemblyIncremental = null!;
 
@@ -33,6 +34,7 @@ public class GeneratorBenchmarks
         m_featureRichStaticExtensionsDisabled = GeneratorBenchmarkScenarioFactory.CreateFeatureRichGraph(emitStaticExtensions: false);
         m_featureRichStaticExtensionsEnabled = GeneratorBenchmarkScenarioFactory.CreateFeatureRichGraph(emitStaticExtensions: true);
         m_multiAssemblyOverrideGraph = GeneratorBenchmarkScenarioFactory.CreateMultiAssemblyOverrideGraph(baseServiceCount: 128, overrideCount: 16);
+        m_manyAssembliesGraph = GeneratorBenchmarkScenarioFactory.CreateManyAssembliesGraph(assemblyCount: 25, typesPerAssembly: 2);
         m_featureRichIncremental = GeneratorBenchmarkScenarioFactory.CreateFeatureRichIncrementalScenario();
         m_referenceAssemblyIncremental = GeneratorBenchmarkScenarioFactory.CreateReferenceAssemblyIncrementalScenario();
 
@@ -42,6 +44,7 @@ public class GeneratorBenchmarks
         GeneratorBenchmarkHarness.Validate(m_featureRichStaticExtensionsDisabled);
         GeneratorBenchmarkHarness.Validate(m_featureRichStaticExtensionsEnabled);
         GeneratorBenchmarkHarness.Validate(m_multiAssemblyOverrideGraph);
+        GeneratorBenchmarkHarness.Validate(m_manyAssembliesGraph);
     }
 
     [Benchmark]
@@ -67,6 +70,14 @@ public class GeneratorBenchmarks
 
     [Benchmark]
     public int Cold_MultiAssemblyOverrideGraph() => GeneratorBenchmarkHarness.RunCold(m_multiAssemblyOverrideGraph);
+
+    /// <summary>
+    /// 25 small assemblies where each layer cumulatively references every prior layer
+    /// (O(n^2) reference edges), isolating <c>GetRelevantAssemblies</c>'s assembly-reachability
+    /// BFS/DFS cost from per-type scanning cost (already covered by <see cref="Cold_NoiseHeavyProject"/>).
+    /// </summary>
+    [Benchmark]
+    public int Cold_ManyAssembliesGraph() => GeneratorBenchmarkHarness.RunCold(m_manyAssembliesGraph);
 }
 
 internal sealed class ColdGeneratorScenario(CSharpCompilation compilation, AnalyzerConfigOptionsProvider optionsProvider)
@@ -231,6 +242,35 @@ internal static class GeneratorBenchmarkScenarioFactory
             new BenchmarkSourceDocument("DerivedServices.cs", BuildOverrideDerivedSource(baseAssemblyName, derivedAssemblyName, baseServiceCount, overrideCount)));
 
         return new ColdGeneratorScenario(derivedCompilation, s_staticExtensionsDisabledOptions);
+    }
+
+    /// <summary>
+    /// A layered graph of many small assemblies where each layer cumulatively references every
+    /// prior layer (fan-in), producing O(assemblyCount^2) reference edges rather than one edge per
+    /// assembly. Exists to measure <c>GetRelevantAssemblies</c>'s assembly-reachability BFS cost in
+    /// isolation, since <see cref="CreateMultiAssemblyOverrideGraph"/> only involves 2 custom
+    /// assemblies and can't show a signal for that specific cost.
+    /// </summary>
+    public static ColdGeneratorScenario CreateManyAssembliesGraph(int assemblyCount, int typesPerAssembly)
+    {
+        var priorReferences = ImmutableArray<MetadataReference>.Empty;
+        CSharpCompilation compilation = null!;
+        for (var i = 0; i < assemblyCount; i++)
+        {
+            var assemblyName = $"GeneratorManyAssembliesLayer{i}";
+            var references = priorReferences.IsDefaultOrEmpty ? s_metadataReferences : s_metadataReferences.AddRange(priorReferences);
+            compilation = CreateCompilation(
+                assemblyName,
+                references,
+                new BenchmarkSourceDocument($"Layer{i}.cs", BuildManyAssembliesLayerSource(assemblyName, i, typesPerAssembly)));
+
+            // The final layer doesn't need to be emitted; only earlier layers need a real
+            // MetadataReference so later layers can reference them.
+            if (i < assemblyCount - 1)
+                priorReferences = priorReferences.Add(EmitReference(compilation));
+        }
+
+        return new ColdGeneratorScenario(compilation, s_staticExtensionsDisabledOptions);
     }
 
     public static FeatureRichIncrementalScenario CreateFeatureRichIncrementalScenario()
@@ -661,6 +701,27 @@ internal static class GeneratorBenchmarkScenarioFactory
         sb.AppendLine($"public sealed class DerivedRoot(ISharedService sharedService, INode0 firstNode, INode{baseServiceCount - 1} lastNode)");
         sb.AppendLine("{");
         sb.AppendLine("}");
+        sb.AppendLine("}");
+        return sb.ToString();
+    }
+
+    private static string BuildManyAssembliesLayerSource(string assemblyName, int layerIndex, int typesPerLayer)
+    {
+        var sb = new StringBuilder();
+        sb.AppendLine("using FactoryGenerator.Attributes;");
+        sb.AppendLine();
+        sb.AppendLine($"namespace {assemblyName}");
+        sb.AppendLine("{");
+
+        for (var i = 0; i < typesPerLayer; i++)
+        {
+            sb.AppendLine("[Inject]");
+            sb.AppendLine($"public sealed class Layer{layerIndex}Service{i}");
+            sb.AppendLine("{");
+            sb.AppendLine("}");
+            sb.AppendLine();
+        }
+
         sb.AppendLine("}");
         return sb.ToString();
     }

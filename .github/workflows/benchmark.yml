@@ -52,4 +52,7 @@ jobs:
           alert-threshold: '200%'
           comment-on-alert: false
           fail-on-alert: false
+          # The prior step already fetched and locally committed to gh-pages in this same job;
+          # re-fetching here would be rejected as non-fast-forward against that local commit.
+          skip-fetch-gh-pages: true
           auto-push: true
