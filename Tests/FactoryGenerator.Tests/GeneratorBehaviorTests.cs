@@ -56,6 +56,43 @@ public class GeneratorBehaviorTests
     }
 
     [Test]
+    public void GeneratorPicksUpClassesViaAttributeAppliedToImplementedInterface()
+    {
+        // [Inject] is declared on the interface, not the implementing class. FindMethods must
+        // still discover ImplicitlyInjected by checking type.AllInterfaces for attributes, not just
+        // the type's own attributes — pins down this (previously untested) discovery path so it
+        // can't silently regress in a future refactor of the type-scanning pipeline.
+        const string source = """
+                              using FactoryGenerator.Attributes;
+
+                              namespace Sample
+                              {
+                              [Inject]
+                              public interface IMarker
+                              {
+                              }
+
+                              public class ImplicitlyInjected : IMarker
+                              {
+                              }
+                              }
+                              """;
+
+        var compilation = CreateCompilation(source);
+        var (runResult, outputCompilation) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
+
+        var generatedSource = string.Join(Environment.NewLine, generatorResult.GeneratedSources.Select(sourceResult => sourceResult.SourceText.ToString()));
+        generatedSource.ShouldContain("ImplicitlyInjected");
+    }
+
+    [Test]
     public void GeneratorSupportsBooleanKeysThatAreNotIdentifiers()
     {
         const string source = """
