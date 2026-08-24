@@ -93,6 +93,58 @@ public class GeneratorBehaviorTests
     }
 
     [Test]
+    public void GeneratorSupportsIdenticallyNamedContainerParametersAcrossDifferentInjections()
+    {
+        // Two unrelated injections both take an IContainer-typed external constructor parameter
+        // with the exact same identifier name ("lifeTimeScope"). Both end up as
+        // declarations[parameter.Name] = "..." in GenerateCode; since that's a Dictionary, the
+        // second assignment must just overwrite the first (same key) rather than producing two
+        // separate AddSource calls for the same hint name — pins down that this legitimate,
+        // realistic naming collision within a single generator run doesn't throw.
+        const string source = """
+                              using FactoryGenerator;
+                              using FactoryGenerator.Attributes;
+
+                              namespace Sample
+                              {
+                              public interface IServiceA
+                              {
+                              }
+
+                              public interface IServiceB
+                              {
+                              }
+
+                              [Inject]
+                              public class ServiceA : IServiceA
+                              {
+                                  public ServiceA(IContainer lifeTimeScope)
+                                  {
+                                  }
+                              }
+
+                              [Inject]
+                              public class ServiceB : IServiceB
+                              {
+                                  public ServiceB(IContainer lifeTimeScope)
+                                  {
+                                  }
+                              }
+                              }
+                              """;
+
+        var compilation = CreateCompilation(source);
+        var (runResult, outputCompilation) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+                         .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+                         .ToArray()
+                         .ShouldBeEmpty();
+    }
+
+    [Test]
     public void GeneratorSupportsBooleanKeysThatAreNotIdentifiers()
     {
         const string source = """
