@@ -41,6 +41,10 @@ jobs:
           fail-on-alert: false
           auto-push: true
 
+      - name: Reset gh-pages branch for second benchmark
+        run: |
+          git fetch origin gh-pages:gh-pages --force || true          
+
       - name: Store generator benchmark result
         uses: benchmark-action/github-action-benchmark@v1
         with:
