@@ -10,7 +10,7 @@ using Microsoft.CodeAnalysis.Diagnostics;
 namespace Benchmarks;
 
 [MemoryDiagnoser]
-[ShortRunJob]
+[Config(typeof(AccurateColdStartConfig))]
 [JsonExporterAttribute.Full]
 [JsonExporterAttribute.FullCompressed]
 public class GeneratorBenchmarks

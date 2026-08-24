@@ -98,11 +98,11 @@ namespace FactoryGenerator
             interfaces = interfaces.AddRange(attributedInterfaces);
 
             var isDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.SpecialType == SpecialType.System_IDisposable);
-            var isAsyncDisposable = namedTypeSymbol.AllInterfaces.Any(i => i.ToString() == "System.IAsyncDisposable");
+            var isAsyncDisposable = namedTypeSymbol.AllInterfaces.Any(IsAsyncDisposableInterface);
             var disposableIface = interfaces.FirstOrDefault(i => i.SpecialType == SpecialType.System_IDisposable);
             if (disposableIface is not null)
                 interfaces = interfaces.Remove(disposableIface);
-            var asyncDisposableIface = interfaces.FirstOrDefault(i => i.ToString() == "System.IAsyncDisposable");
+            var asyncDisposableIface = interfaces.FirstOrDefault(IsAsyncDisposableInterface);
             if (asyncDisposableIface is not null)
                 interfaces = interfaces.Remove(asyncDisposableIface);
 
@@ -177,6 +177,16 @@ namespace FactoryGenerator
                 return new BooleanInjection(true, key);
             return null;
         }
+
+        /// <summary>
+        /// Checks whether an interface is <c>System.IAsyncDisposable</c> without paying for a full
+        /// display-string (<c>ToString()</c>) computation on every interface. Roslyn has no
+        /// <see cref="SpecialType"/> entry for it (it postdates the "special type" list), so a name
+        /// check first is used to filter out the overwhelming majority of unrelated interfaces before
+        /// falling back to the (cheaper, non-generic) containing-namespace comparison.
+        /// </summary>
+        private static bool IsAsyncDisposableInterface(INamedTypeSymbol i) =>
+            i.Name == "IAsyncDisposable" && i.ContainingNamespace?.ToDisplayString() == "System";
 
         private static int GetAssemblyPriority(IAssemblySymbol? assemblySymbol)
         {

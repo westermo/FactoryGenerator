@@ -2,7 +2,6 @@ using Inherited;
 using Inheritor;
 using Inheritor.Generated;
 using Shouldly;
-using System.Threading.Tasks;
 using Type = Inherited.Type;
 
 namespace FactoryGenerator.Tests;
@@ -192,6 +191,14 @@ public class InjectionDetectionTests()
     }
 
     [Test]
+    public void OverridenCanStillBeResolvedAsIEnumerable()
+    {
+        var result = m_container.Resolve<IEnumerable<IOverridable>>().ToArray();
+        result.Length.ShouldBe(2);
+        result.Any(x => x is Overriden).ShouldBeTrue();
+    }
+
+    [Test]
     public void OverrideImplementationsPreventFalsePositiveCycleDetection()
     {
         m_container.Resolve<IOverrideCycle>().ShouldBeOfType<OverrideCycleResolved>();
@@ -361,6 +368,7 @@ public class InjectionDetectionTests()
     {
         m_container.Resolve<Containing.Containee>();
     }
+
     [Test]
     public void ContainerMayCreateItself()
     {
@@ -369,12 +377,14 @@ public class InjectionDetectionTests()
         resolved.Count().ShouldBe(6);
         var nonInjected = m_container.Resolve<Inherited.NonInjectedClass>();
     }
+
     [Test]
     public void HierarchicalContainersResolveArraysProperly()
     {
         var newContainer = new DependencyInjectionContainer(m_container);
         newContainer.Resolve<ArrayConsumer>().Arrays.Count().ShouldBe(6);
     }
+
     [Test]
     public void HierarchicalContainersResolveUsesFallBackIfItCannotFindImplementation()
     {
@@ -415,6 +425,7 @@ public class InjectionDetectionTests()
         newContainer.GetBoolean("A").ShouldBeFalse();
         newContainer.GetBoolean("TestBool").ShouldBeTrue();
     }
+
     [Test]
     public void HierarchicalContainersPropgatesBooleansUnknownToIt()
     {
@@ -538,9 +549,51 @@ public class InjectionDetectionTests()
         parent.Resolve<SplitArrayConsumer>().Items.Count().ShouldBe(10);
     }
 
+    // ── Large dependency tree (1-3-9-27) tests ─────────────────────────────────
+
+    [Test]
+    public void LargeTreeRootResolves()
+    {
+        var root = m_container.Resolve<TreeRoot>();
+        root.ShouldNotBeNull();
+    }
+
+    [Test]
+    public void LargeTreeBranchesAreDistinct()
+    {
+        var root = m_container.Resolve<TreeRoot>();
+        new object[] {root.Branch1, root.Branch2, root.Branch3}
+            .ShouldAllBe(b => b != null);
+    }
+
+    [Test]
+    public void LargeTreeLeavesResolveThrough()
+    {
+        var root = m_container.Resolve<TreeRoot>();
+        // Spot-check: walk root → Branch1 → Mid1 → Leaf01
+        root.Branch1.Mid1.Leaf01.ShouldBeOfType<Leaf01>();
+        // Walk root → Branch3 → Mid3 → Leaf27
+        root.Branch3.Mid9.Leaf27.ShouldBeOfType<Leaf27>();
+    }
+
+    [Test]
+    public void LargeTreeAllMidNodesResolve()
+    {
+        var root = m_container.Resolve<TreeRoot>();
+        var mids = new object[]
+        {
+            root.Branch1.Mid1, root.Branch1.Mid2, root.Branch1.Mid3,
+            root.Branch2.Mid4, root.Branch2.Mid5, root.Branch2.Mid6,
+            root.Branch3.Mid7, root.Branch3.Mid8, root.Branch3.Mid9,
+        };
+        mids.ShouldAllBe(m => m != null);
+        mids.Select(m => m.GetType()).Distinct().Count().ShouldBe(9);
+    }
+
     private class DummyContainer : IContainer
     {
         public const string DummyText = "I am a bit of text";
+
         private static readonly IFallbackCollectionItem[] s_fallbackCollectionItems =
         [
             new DummyFallbackCollectionItem(),
@@ -605,11 +658,11 @@ public class InjectionDetectionTests()
             if (typeof(T) == typeof(IEnumerable<IFallbackCollectionItem>)) resolved = (T) (object) s_fallbackCollectionItems;
             return resolved != null;
         }
+
         public IEnumerable<(string Key, bool Value)> GetBooleans()
         {
             return [("B", true), ("C", false)];
         }
-
     }
 
     private sealed class DummyFallbackCollectionItem : IFallbackCollectionItem;

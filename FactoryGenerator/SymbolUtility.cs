@@ -101,13 +101,32 @@ namespace FactoryGenerator
             return sb.ToString();
         }
 
-        public static string SingletonFactory(string typeName, string name, string lazyName, string creation, bool disposable)
+        /// <summary>
+        /// Generates a lazily-initialized, double-checked-lock singleton/scoped factory member.
+        /// </summary>
+        /// <param name="forwardToOwner">
+        /// True only for genuine <c>[Singleton]</c> injections (never <c>[Scoped]</c>). When set, the
+        /// member first checks <c>m_singletonOwner</c> — which is <c>this</c> for a root container and
+        /// the original root for a <c>LifetimeScope</c> (see <see cref="FactoryGenerator.Constructor"/>)
+        /// — and forwards to it if it isn't <c>this</c>. This is what makes a single generated member
+        /// declaration (shared by <c>DependencyInjectionContainer</c> and its <c>LifetimeScope</c>
+        /// subclass) resolve to one shared singleton instance across every scope, without needing a
+        /// separate forwarding declaration duplicated into the scope class.
+        /// </param>
+        public static string SingletonFactory(string typeName, string name, string lazyName, string creation, bool disposable, bool forwardToOwner)
         {
+            var ownerForward = forwardToOwner
+                ? $@"
+        if (m_singletonOwner != this)
+            return m_singletonOwner.{name};
+    "
+                : string.Empty;
+
             if (disposable)
             {
                 return $@"
     internal {typeName} {name}
-    {{
+    {{{ownerForward}
         var cached = {lazyName};
         if (cached != null)
             return cached;
@@ -128,7 +147,7 @@ namespace FactoryGenerator
 
             return $@"
     internal {typeName} {name}
-    {{
+    {{{ownerForward}
         var cached = {lazyName};
         if (cached != null)
             return cached;
