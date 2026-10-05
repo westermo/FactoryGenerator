@@ -78,7 +78,7 @@ namespace FactoryGenerator
             if (injection.Lambda is LambdaData lambda)
             {
                 if (!availableInterfaceFullNames.Contains(lambda.ContainingTypeFullName))
-                    throw new Exception(
+                    throw new GeneratorDiagnosticException(MissingLambdaSource,
                         $"Could not find any [Inject]ed implementations of {lambda.ContainingTypeFullName} to use as the source for the injection of {lambda.ContainingTypeFullName}.{lambda.MemberName}. Please provide at least one injection of the type {lambda.ContainingTypeFullName}.");
 
                 if (!lambda.IsMethod)
@@ -95,7 +95,7 @@ namespace FactoryGenerator
             HashSet<ParameterData>? nullableDefaults = null;
             var ctor = GetBestConstructor(injection, availableInterfaceFullNames, ref missing, ref nullableDefaults);
             if (ctor is null)
-                throw new Exception($"No Construction method for {injection.TypeFullName}. Lambda was null.");
+                throw new GeneratorDiagnosticException(NoConstructionMethod, $"No Construction method for {injection.TypeFullName}. Lambda was null.");
 
             var creation = $"new {injection.TypeFullName}{MakeConstructorCall(ctor, missing, nullableDefaults)}";
             return new InjectionResolution(creation, (IEnumerable<ParameterData>?) missing ?? Enumerable.Empty<ParameterData>(), ctor.Parameters);

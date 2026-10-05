@@ -144,7 +144,7 @@ namespace FactoryGenerator
                         var owner = nodeOwner.TryGetValue(node, out var reachable)
                             ? string.Join(", ", reachable.Select(injection => injection.TypeFullName).Distinct())
                             : node;
-                        throw new InvalidOperationException(
+                        throw new GeneratorDiagnosticException(CyclicDependency,
                             $"Cyclic Dependency Detected: {string.Join(" \u2192 ", cycle)} (via {owner})");
                     }
 

@@ -12,6 +12,7 @@
     <ItemGroup>
         <PackageReference Include="TUnit" />
         <PackageReference Include="Shouldly"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
     </ItemGroup>
 
     <ItemGroup>

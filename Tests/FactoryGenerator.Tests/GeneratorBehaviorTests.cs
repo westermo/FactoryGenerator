@@ -50,9 +50,12 @@ public class GeneratorBehaviorTests
         runResult.Results.Length.ShouldBe(1);
         var generatorResult = runResult.Results[0];
 
-        generatorResult.Exception.ShouldNotBeNull();
-        generatorResult.Exception!.Message.ShouldContain("Multiple externally provided values of the same type");
-        generatorResult.Exception.Message.ShouldContain("Sample.ExternalValue");
+        generatorResult.Exception.ShouldBeNull();
+        var diagnostic = generatorResult.Diagnostics.ShouldHaveSingleItem();
+        diagnostic.Id.ShouldBe("FG004");
+        diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+        diagnostic.GetMessage().ShouldContain("Multiple externally provided values of the same type");
+        diagnostic.GetMessage().ShouldContain("Sample.ExternalValue");
     }
 
     [Test]
@@ -337,10 +340,13 @@ public class GeneratorBehaviorTests
         var (runResult, _) = RunGenerator(compilation);
         var generatorResult = runResult.Results[0];
 
-        generatorResult.Exception.ShouldNotBeNull();
-        generatorResult.Exception!.Message.ShouldContain("Cyclic Dependency Detected");
-        generatorResult.Exception.Message.ShouldContain("Sample.IResult");
-        generatorResult.Exception.Message.ShouldContain("Sample.IFactory");
+        generatorResult.Exception.ShouldBeNull();
+        var diagnostic = generatorResult.Diagnostics.ShouldHaveSingleItem();
+        diagnostic.Id.ShouldBe("FG003");
+        diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+        diagnostic.GetMessage().ShouldContain("Cyclic Dependency Detected");
+        diagnostic.GetMessage().ShouldContain("Sample.IResult");
+        diagnostic.GetMessage().ShouldContain("Sample.IFactory");
     }
 
     [Test]
@@ -381,10 +387,13 @@ public class GeneratorBehaviorTests
         var (runResult, _) = RunGenerator(compilation);
         var generatorResult = runResult.Results[0];
 
-        generatorResult.Exception.ShouldNotBeNull();
-        generatorResult.Exception!.Message.ShouldContain("Cyclic Dependency Detected");
-        generatorResult.Exception.Message.ShouldContain("Sample.IResult");
-        generatorResult.Exception.Message.ShouldContain("Sample.IFactory");
+        generatorResult.Exception.ShouldBeNull();
+        var diagnostic = generatorResult.Diagnostics.ShouldHaveSingleItem();
+        diagnostic.Id.ShouldBe("FG003");
+        diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+        diagnostic.GetMessage().ShouldContain("Cyclic Dependency Detected");
+        diagnostic.GetMessage().ShouldContain("Sample.IResult");
+        diagnostic.GetMessage().ShouldContain("Sample.IFactory");
     }
 
     [Test]
@@ -605,6 +614,81 @@ public class GeneratorBehaviorTests
         var generatedSource = string.Join(Environment.NewLine, generatorResult.GeneratedSources.Select(sourceResult => sourceResult.SourceText.ToString()));
         generatedSource.ShouldContain($"internal {baseAssemblyName}.IService {serviceMemberName} => {prioritizedImplementationMemberName};");
         generatedSource.ShouldNotContain($"internal {baseAssemblyName}.IService {serviceMemberName} => {nonPrioritizedImplementationMemberName};");
+    }
+
+    [Test]
+    public void GeneratorReportsDiagnosticWhenInjectedMemberHasNoSource()
+    {
+        const string source = """
+                              using FactoryGenerator.Attributes;
+
+                              namespace Sample
+                              {
+                              public interface IResult
+                              {
+                              }
+
+                              public interface IFactory
+                              {
+                                  [Inject]
+                                  IResult Create();
+                              }
+                              }
+                              """;
+
+        var compilation = CreateCompilation(source);
+        var (runResult, _) = RunGenerator(compilation);
+        var generatorResult = runResult.Results[0];
+
+        generatorResult.Exception.ShouldBeNull();
+        var diagnostic = generatorResult.Diagnostics.ShouldHaveSingleItem();
+        diagnostic.Id.ShouldBe("FG001");
+        diagnostic.Severity.ShouldBe(DiagnosticSeverity.Error);
+        diagnostic.GetMessage().ShouldContain("Sample.IFactory");
+    }
+
+    [Test]
+    public void GeneratorDoesNotRegenerateForUnrelatedEdits()
+    {
+        const string source = """
+                              using FactoryGenerator.Attributes;
+
+                              namespace Sample
+                              {
+                              public interface IService
+                              {
+                              }
+
+                              [Inject]
+                              public class Service : IService
+                              {
+                              }
+                              }
+                              """;
+
+        var compilation = CreateCompilation(source);
+        var parseOptions = (CSharpParseOptions) compilation.SyntaxTrees.First().Options;
+        GeneratorDriver driver = CSharpGeneratorDriver.Create(
+            [new global::FactoryGenerator.FactoryGenerator().AsSourceGenerator()],
+            parseOptions: parseOptions,
+            driverOptions: new GeneratorDriverOptions(IncrementalGeneratorOutputKind.None, trackIncrementalGeneratorSteps: true));
+
+        driver = driver.RunGenerators(compilation);
+        driver.GetRunResult().Results[0].Exception.ShouldBeNull();
+
+        var edited = compilation.AddSyntaxTrees(CSharpSyntaxTree.ParseText("namespace Sample { internal class Unrelated { } }", parseOptions));
+        driver = driver.RunGenerators(edited);
+        var result = driver.GetRunResult().Results[0];
+
+        result.Exception.ShouldBeNull();
+        result.TrackedSteps.ShouldContainKey("Analysis");
+        result.TrackedSteps["Analysis"]
+              .SelectMany(step => step.Outputs)
+              .ShouldAllBe(output => output.Reason == IncrementalStepRunReason.Cached || output.Reason == IncrementalStepRunReason.Unchanged);
+        result.TrackedOutputSteps
+              .SelectMany(pair => pair.Value)
+              .SelectMany(step => step.Outputs)
+              .ShouldAllBe(output => output.Reason == IncrementalStepRunReason.Cached || output.Reason == IncrementalStepRunReason.Unchanged);
     }
 
     private static CSharpCompilation CreateCompilation(string assemblyName, string source, params MetadataReference[] additionalReferences)

@@ -34,7 +34,7 @@ namespace FactoryGenerator
                 return;
 
             var details = string.Join("; ", ambiguousParameters.Select(group => $"{group.TypeFullName} ({string.Join(", ", group.Names)})"));
-            throw new InvalidOperationException(
+            throw new GeneratorDiagnosticException(AmbiguousExternalValues,
                 $"Multiple externally provided values of the same type are not supported because FactoryGenerator resolves external values by type. Conflicting parameters: {details}. Wrap the values in distinct types or inject a dedicated options object.");
         }
 

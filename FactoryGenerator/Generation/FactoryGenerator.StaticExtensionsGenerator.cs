@@ -67,13 +67,20 @@ namespace FactoryGenerator
 
         private static void MakeStaticExtensions(
             SourceProductionContext context,
-            ((InjectionAnalysis Analysis, Compilation Compilation) Left, bool SupportsExtensions) data)
+            (InjectionAnalysis Analysis, bool SupportsExtensions) data)
         {
             if (!data.SupportsExtensions) return;
-            GenerateStaticExtensions(data.Left.Analysis, data.Left.Compilation, context);
+            try
+            {
+                GenerateStaticExtensions(data.Analysis, data.Analysis.AssemblyName, context);
+            }
+            catch (GeneratorDiagnosticException e)
+            {
+                context.ReportDiagnostic(e.ToDiagnostic());
+            }
         }
 
-        private static void GenerateStaticExtensions(InjectionAnalysis analysis, Compilation compilation, SourceProductionContext context)
+        private static void GenerateStaticExtensions(InjectionAnalysis analysis, string assemblyName, SourceProductionContext context)
         {
             var interfaceInjectors = analysis.InterfaceInjectors;
             var interfaceMemberNames = analysis.InterfaceMemberNames;
@@ -97,7 +104,7 @@ namespace FactoryGenerator
                           using System.Collections.Generic;
                           using System.Collections.Immutable;
                           using System.Linq;
-                          namespace {compilation.Assembly.Name}.Generated;
+                          namespace {assemblyName}.Generated;
                           #nullable enable
                           """;
             var state = $$"""
