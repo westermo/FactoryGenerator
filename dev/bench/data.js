@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1791271606879,
+  "lastUpdate": 1791271608360,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -1484,6 +1484,102 @@ window.BENCHMARK_DATA = {
             "value": 777381.6848958334,
             "unit": "ns",
             "range": "± 128029.14729398263"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c86f5ba42fe99c1ff72a938959d5037b21ba92c",
+          "message": "Make generator incremental, report diagnostics, and clean up CI/packaging (#31)\n\n- Split pipeline into equatable Scan/Analysis stages with tracking names so\n  unrelated edits hit the incremental cache.\n- Replace generator exceptions with FG001-FG004 compiler diagnostics and add\n  analyzer release tracking.\n- Pin Roslyn refs to 4.8.0 (PrivateAssets=all) for broader IDE/SDK support,\n  tidy Directory.Packages.props, harden IsInjection.\n- Rewrite build workflow: Release config, single pack job, --skip-duplicate.\n- Tests: diagnostic assertions, FG001 case, incrementality caching test.",
+          "timestamp": "2026-10-06T09:14:53+02:00",
+          "tree_id": "23182950fa4a508419eae98257638d6146276bf1",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/3c86f5ba42fe99c1ff72a938959d5037b21ba92c"
+        },
+        "date": 1791271608348,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph",
+            "value": 5457449.829166667,
+            "unit": "ns",
+            "range": "± 215993.59894102733"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph_StaticExtensionsEnabled",
+            "value": 8823679.165384617,
+            "unit": "ns",
+            "range": "± 314881.4215826509"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_NoiseHeavyProject",
+            "value": 1530180.2991648708,
+            "unit": "ns",
+            "range": "± 106102.8737720186"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsDisabled",
+            "value": 227552.1104266827,
+            "unit": "ns",
+            "range": "± 3274.2410207152193"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsEnabled",
+            "value": 304875.38037109375,
+            "unit": "ns",
+            "range": "± 5724.103905009766"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_MultiAssemblyOverrideGraph",
+            "value": 2392220.647235577,
+            "unit": "ns",
+            "range": "± 79954.7504993498"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ManyAssembliesGraph",
+            "value": 724859.2692307692,
+            "unit": "ns",
+            "range": "± 10550.11269923256"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_NoOpRerun",
+            "value": 29531.291589355467,
+            "unit": "ns",
+            "range": "± 327.7353425027514"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_UnrelatedEdit",
+            "value": 160901.58732722356,
+            "unit": "ns",
+            "range": "± 2078.3552270595383"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_InjectedSignatureEdit",
+            "value": 317164.5079427083,
+            "unit": "ns",
+            "range": "± 5579.10939097254"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_AddInjection",
+            "value": 305572.8712439904,
+            "unit": "ns",
+            "range": "± 3297.1363259276022"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_ReferenceAssemblyChange",
+            "value": 225852.50100911458,
+            "unit": "ns",
+            "range": "± 3135.2467530462154"
           }
         ]
       }
