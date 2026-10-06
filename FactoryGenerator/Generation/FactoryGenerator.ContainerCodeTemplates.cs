@@ -21,7 +21,7 @@ namespace FactoryGenerator
     /// </summary>
     public partial class FactoryGenerator
     {
-        private static void GenerateCode(InjectionAnalysis analysis, Compilation compilation, ILogger log, SourceProductionContext context)
+        private static void GenerateCode(InjectionAnalysis analysis, string assemblyName, ILogger log, SourceProductionContext context)
         {
             var ordered = analysis.Ordered;
             var interfaceInjectors = analysis.InterfaceInjectors;
@@ -42,7 +42,7 @@ using System.Collections.Immutable;
 using System.Threading.Tasks;
 using FactoryGenerator;
 using System.CodeDom.Compiler;
-namespace {compilation.Assembly.Name}.Generated;
+namespace {assemblyName}.Generated;
 #nullable enable";
 
             var lookup = $@"{usingStatements}
@@ -129,7 +129,7 @@ public partial class {ClassName} : IContainer, IContainerScopeFactory, IContaine
             current = current.Inheritor;
         }}
     }}
-    public string AssemblyName => ""{compilation.Assembly.Name}"";
+    public string AssemblyName => ""{assemblyName}"";
     public IContainer? Base {{ get; }}
     public IContainer? Inheritor {{ get; set; }}
     internal readonly object m_lock = new();
@@ -430,7 +430,7 @@ namespace System.Runtime.CompilerServices
 }}
 #endif
 
-namespace {compilation.Assembly.Name}.Generated
+namespace {assemblyName}.Generated
 {{
     /// <summary>
     /// Provides a static factory for the generated container and auto-registers it in the ContainerRegistry on assembly load.
@@ -448,12 +448,12 @@ namespace {compilation.Assembly.Name}.Generated
         /// <summary>
         /// The assembly name this container was generated for.
         /// </summary>
-        public static string AssemblyName => ""{compilation.Assembly.Name}"";
+        public static string AssemblyName => ""{assemblyName}"";
 
         [ModuleInitializer]
         internal static void Register()
         {{
-            ContainerRegistry.Register(""{compilation.Assembly.Name}"", Create);
+            ContainerRegistry.Register(""{assemblyName}"", Create);
         }}
     }}
 }}

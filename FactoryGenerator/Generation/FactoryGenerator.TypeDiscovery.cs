@@ -194,7 +194,10 @@ namespace FactoryGenerator
 
             bool IsInjection(AttributeData attribute)
             {
-                return attribute.AttributeClass?.Name.Contains("Inject") == true && attribute.AttributeClass.ToString().StartsWith("FactoryGenerator.Attributes");
+                var attributeClass = attribute.AttributeClass;
+                return attributeClass is not null &&
+                       attributeClass.Name.Contains("Inject") &&
+                       attributeClass.ContainingNamespace?.ToDisplayString() == "FactoryGenerator.Attributes";
             }
 
             bool HasInjectionAttribute(INamedTypeSymbol type)

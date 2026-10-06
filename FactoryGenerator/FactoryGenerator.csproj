@@ -27,8 +27,18 @@
     </PropertyGroup>
 
     <ItemGroup>
-        <PackageReference Include="Microsoft.CodeAnalysis.Common"/>
-        <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+        <!--
+        The generator is loaded into whatever compiler the consumer's SDK / IDE ships. Building
+        against the newest Roslyn would make the analyzer fail to load (CS9057) on older hosts, so
+        compile against the oldest Roslyn that provides every API we use (4.8 = .NET 8 SDK /
+        VS 2022 17.8). Test projects still run against the centrally pinned newer version.
+        -->
+        <PackageReference Include="Microsoft.CodeAnalysis.Common" VersionOverride="4.8.0" PrivateAssets="all"/>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" VersionOverride="4.8.0" PrivateAssets="all"/>
+    </ItemGroup>
+    <ItemGroup>
+        <AdditionalFiles Include="AnalyzerReleases.Shipped.md"/>
+        <AdditionalFiles Include="AnalyzerReleases.Unshipped.md"/>
     </ItemGroup>
     <ItemGroup>
         <None Include="$(OutputPath)\$(AssemblyName).dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false"/>
