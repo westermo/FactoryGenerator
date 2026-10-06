@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1787585391756,
+  "lastUpdate": 1791271606879,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -1110,6 +1110,132 @@ window.BENCHMARK_DATA = {
             "value": 101.24340963363647,
             "unit": "ns",
             "range": "± 0.6657037879353995"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c86f5ba42fe99c1ff72a938959d5037b21ba92c",
+          "message": "Make generator incremental, report diagnostics, and clean up CI/packaging (#31)\n\n- Split pipeline into equatable Scan/Analysis stages with tracking names so\n  unrelated edits hit the incremental cache.\n- Replace generator exceptions with FG001-FG004 compiler diagnostics and add\n  analyzer release tracking.\n- Pin Roslyn refs to 4.8.0 (PrivateAssets=all) for broader IDE/SDK support,\n  tidy Directory.Packages.props, harden IsInjection.\n- Rewrite build workflow: Release config, single pack job, --skip-duplicate.\n- Tests: diagnostic assertions, FG001 case, incrementality caching test.",
+          "timestamp": "2026-10-06T09:14:53+02:00",
+          "tree_id": "23182950fa4a508419eae98257638d6146276bf1",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/3c86f5ba42fe99c1ff72a938959d5037b21ba92c"
+        },
+        "date": 1791271606245,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 58.29554431779044,
+            "unit": "ns",
+            "range": "± 0.8953805221407547"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 4.873517680626649,
+            "unit": "ns",
+            "range": "± 0.026242109974699886"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 5.2801131745179495,
+            "unit": "ns",
+            "range": "± 0.10551236950844296"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 6.88428829739923,
+            "unit": "ns",
+            "range": "± 0.2642511853027759"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveArray",
+            "value": 7.7956265306898525,
+            "unit": "ns",
+            "range": "± 0.023768560544322432"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 3470.949453353882,
+            "unit": "ns",
+            "range": "± 56.183379539892215"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateFromSelf",
+            "value": 3683.5971590677896,
+            "unit": "ns",
+            "range": "± 112.60001303848135"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateLifetimeScope",
+            "value": 4271.172911224366,
+            "unit": "ns",
+            "range": "± 206.50914025876756"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingletonThroughScope",
+            "value": 12.621287181973457,
+            "unit": "ns",
+            "range": "± 0.09420592423089831"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScopedThroughScope",
+            "value": 10.127891796476701,
+            "unit": "ns",
+            "range": "± 0.24122565756760694"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveSingleton",
+            "value": 5.918125968264497,
+            "unit": "ns",
+            "range": "± 0.29037313850393776"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveSingletonNullContainer",
+            "value": 8.807248133577799,
+            "unit": "ns",
+            "range": "± 0.2318873612548578"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveTransient",
+            "value": 8.780944144974152,
+            "unit": "ns",
+            "range": "± 0.2654687180127243"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveChain",
+            "value": 58.67924518170564,
+            "unit": "ns",
+            "range": "± 2.099447837672846"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveChainNullContainer",
+            "value": 57.974498276909195,
+            "unit": "ns",
+            "range": "± 1.7956611001849347"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveWithCollection",
+            "value": 51.00036633312702,
+            "unit": "ns",
+            "range": "± 1.208475422564669"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveWithCollectionNullContainer",
+            "value": 55.120274220642294,
+            "unit": "ns",
+            "range": "± 1.2669170597060209"
           }
         ]
       }
