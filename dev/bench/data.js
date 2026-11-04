@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793801194504,
+  "lastUpdate": 1793801196323,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -1706,6 +1706,102 @@ window.BENCHMARK_DATA = {
             "value": 225852.50100911458,
             "unit": "ns",
             "range": "± 3135.2467530462154"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "2a457af382bb58206cbf01087f7266f114442eca",
+          "message": "Added support for generic method injections, to support injection of things like ILogger<T> (#32)",
+          "timestamp": "2026-11-04T14:53:43+01:00",
+          "tree_id": "59855650110a111e28b496d6e9e850161b2c5674",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/2a457af382bb58206cbf01087f7266f114442eca"
+        },
+        "date": 1793801196304,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph",
+            "value": 8672967.667067308,
+            "unit": "ns",
+            "range": "± 88130.3823662892"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph_StaticExtensionsEnabled",
+            "value": 14178229.038461538,
+            "unit": "ns",
+            "range": "± 1052051.1544238725"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_NoiseHeavyProject",
+            "value": 3038518.9270833335,
+            "unit": "ns",
+            "range": "± 275450.000682792"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsDisabled",
+            "value": 739484.3264508928,
+            "unit": "ns",
+            "range": "± 10518.51494364942"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsEnabled",
+            "value": 843368.4063802083,
+            "unit": "ns",
+            "range": "± 158263.32997025855"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_MultiAssemblyOverrideGraph",
+            "value": 5397242.541666667,
+            "unit": "ns",
+            "range": "± 114286.31426086293"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ManyAssembliesGraph",
+            "value": 1343157.5617897727,
+            "unit": "ns",
+            "range": "± 26859.57964694398"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_NoOpRerun",
+            "value": 86519.45550130209,
+            "unit": "ns",
+            "range": "± 27091.754377528883"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_UnrelatedEdit",
+            "value": 498321.57346754806,
+            "unit": "ns",
+            "range": "± 3633.6968144247744"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_InjectedSignatureEdit",
+            "value": 829505.7881510417,
+            "unit": "ns",
+            "range": "± 129640.90683532013"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_AddInjection",
+            "value": 927251.470703125,
+            "unit": "ns",
+            "range": "± 7334.363061156057"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_ReferenceAssemblyChange",
+            "value": 500133.8670372596,
+            "unit": "ns",
+            "range": "± 2876.548866970913"
           }
         ]
       }
