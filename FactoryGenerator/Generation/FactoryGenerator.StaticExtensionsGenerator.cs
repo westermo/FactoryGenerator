@@ -603,7 +603,7 @@ namespace FactoryGenerator
                     return $"{containingInvocation}.{lambda.MemberName}";
 
                 var lambdaArguments = BuildStaticArgumentList(lambda.MethodParameters, specs, booleanIdentifiers, externalIdentifiers);
-                return $"{containingInvocation}.{lambda.MemberName}({lambdaArguments})";
+                return $"{containingInvocation}.{GetLambdaMethodName(lambda)}({lambdaArguments})";
             }
 
             var constructor = GetCachedBestConstructor(injection, availableInterfaces, constructorCache);

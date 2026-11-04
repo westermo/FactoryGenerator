@@ -149,7 +149,7 @@ namespace FactoryGenerator
         private static InjectionScanResult ScanCompilation(Compilation compilation, CancellationToken token)
         {
             var scope = GetInjectionScanScope(compilation, token);
-            var rawInjections = FindMethods(scope, token).ToImmutableArray();
+            var rawInjections = ExpandGenericFactories(FindMethods(scope, token).ToList(), compilation, token);
             token.ThrowIfCancellationRequested();
             var distances = BuildAssemblyDistances(compilation, rawInjections.Select(injection => injection.AssemblyName))
                 .OrderBy(pair => pair.Key, StringComparer.Ordinal)

@@ -27,7 +27,10 @@ namespace FactoryGenerator
                         containingTypeFullName: methodSymbol.ContainingType.ToString()!,
                         containingTypeMemberName: SymbolUtility.MemberName(methodSymbol.ContainingType),
                         memberName: methodSymbol.Name,
-                        methodParameters: methodSymbol.Parameters.Select(ExtractParameter).ToImmutableArray());
+                        methodParameters: methodSymbol.Parameters.Select(ExtractParameter).ToImmutableArray(),
+                        genericTypeArguments: methodSymbol.IsGenericMethod && !IsOpenGenericMethod(methodSymbol)
+                            ? methodSymbol.TypeArguments.Select(argument => argument.ToString()!).ToImmutableArray()
+                            : ImmutableArray<string>.Empty);
                     break;
                 case IPropertySymbol propertySymbol:
                     namedTypeSymbol = propertySymbol.Type as INamedTypeSymbol;
@@ -36,7 +39,8 @@ namespace FactoryGenerator
                         containingTypeFullName: propertySymbol.ContainingType.ToString()!,
                         containingTypeMemberName: SymbolUtility.MemberName(propertySymbol.ContainingType),
                         memberName: propertySymbol.Name,
-                        methodParameters: ImmutableArray<ParameterData>.Empty);
+                        methodParameters: ImmutableArray<ParameterData>.Empty,
+                        genericTypeArguments: ImmutableArray<string>.Empty);
                     break;
             }
 
@@ -148,6 +152,13 @@ namespace FactoryGenerator
                 constructors: constructors,
                 lambda: lambdaData);
         }
+
+        /// <summary>
+        /// True for a generic method whose type parameters are still unbound (a factory template such as
+        /// <c>ILogger&lt;T&gt; Create&lt;T&gt;()</c>), as opposed to a constructed, closed specialization of one.
+        /// </summary>
+        internal static bool IsOpenGenericMethod(IMethodSymbol method) =>
+            method.IsGenericMethod && method.TypeArguments.Any(argument => argument.TypeKind == TypeKind.TypeParameter);
 
         private static ParameterData ExtractParameter(IParameterSymbol parameter)
         {

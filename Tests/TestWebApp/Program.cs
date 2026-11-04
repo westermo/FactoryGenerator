@@ -1,4 +1,4 @@
-﻿using FactoryGenerator.Attributes;
+using FactoryGenerator.Attributes;
 using FactoryGenerator.Extensions.AspNetCore;
 using Microsoft.AspNetCore.Mvc;
 
@@ -33,20 +33,44 @@ public class DateService : IDateService
     public string GetDateString() => DateTime.UtcNow.ToShortDateString();
 }
 
+// A single open-generic factory method. FactoryGenerator specializes it at compile time for every
+// closed ILogger<T> requested by an injected constructor (ILogger<WelcomeService>, ILogger<GreetingFormatter>).
+// ILoggerFactory is not registered with FactoryGenerator, so it is resolved from ASP.NET's service provider.
+[Inject, Self]
+public sealed class LoggingRegistrations
+{
+    [Inject, Singleton, ExceptAs<ILogger>]
+    public ILogger<TCategory> CreateLogger<TCategory>(ILoggerFactory loggerFactory) =>
+        loggerFactory.CreateLogger<TCategory>();
+}
+
+public interface IGreetingFormatter
+{
+    string Format(string date);
+}
+
+[Inject]
+public class GreetingFormatter(ILogger<GreetingFormatter> logger) : IGreetingFormatter
+{
+    public string Format(string date)
+    {
+        logger.LogInformation("Formatting greeting for {Date}", date);
+        return $"Welcome! Today is {date}. Resolved via FactoryGenerator!";
+    }
+}
+
 public interface IWelcomeService
 {
     string GetWelcomeMessage();
 }
 
 [Inject]
-public class WelcomeService : IWelcomeService
+public class WelcomeService(IDateService dateService, IGreetingFormatter formatter, ILogger<WelcomeService> logger)
+    : IWelcomeService
 {
-    private readonly IDateService _dateService;
-
-    public WelcomeService(IDateService dateService)
+    public string GetWelcomeMessage()
     {
-        _dateService = dateService;
+        logger.LogInformation("Building welcome message");
+        return formatter.Format(dateService.GetDateString());
     }
-
-    public string GetWelcomeMessage() => $"Welcome! Today is {_dateService.GetDateString()}. Resolved via FactoryGenerator!";
 }

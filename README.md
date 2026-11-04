@@ -189,6 +189,60 @@ With this code, it is now possible to do `container.Resolve<IResultType>()`, whi
 
 Injected method parameters follow the same rules as constructor parameters: unresolved external values are surfaced on the generated container constructor, optional parameters keep their declared defaults, and `params` collections are supplied from the container when possible.
 
+### Typed Microsoft.Extensions.Logging loggers
+
+`ILogger<TCategory>` can be supplied without Microsoft DI or Generic Host. Reference
+`Microsoft.Extensions.Logging.Abstractions` from the project declaring the registrations
+and reuse the application's existing `ILoggerFactory`:
+
+```csharp
+using FactoryGenerator.Attributes;
+using Microsoft.Extensions.Logging;
+
+[Inject, Self]
+public sealed class Worker(ILogger<Worker> logger)
+{
+    public void Run() => logger.LogInformation("Working");
+}
+
+[Inject, Self]
+public sealed class LoggingRegistrations
+{
+    [Inject, Singleton, ExceptAs<ILogger>]
+    public ILogger<TCategory> CreateLogger<TCategory>(ILoggerFactory loggerFactory)
+        => loggerFactory.CreateLogger<TCategory>();
+}
+```
+
+In the composition root, pass the existing factory to
+`new Generated.DependencyInjectionContainer(loggerFactory)` (alongside any other
+generated constructor arguments), then call `container.Resolve<Worker>()`.
+The generated resolution chain calls the registration method and passes its result
+to `Worker`. `[Singleton]` caches the typed logger, including across lifetime scopes.
+`[ExceptAs<ILogger>]` prevents each typed registration from also registering its
+inherited, non-generic `ILogger` interface. The caller retains ownership of an
+externally supplied factory and must keep it alive until logging consumers are finished.
+No provider configuration or telemetry adapter change is needed.
+
+Generic `[Inject]` factory methods are specialized for closed service types found
+in injected constructors or injected method parameters. For example, an
+`ILogger<TCategory>` factory is generated separately for `ILogger<Worker>` and
+`ILogger<OtherWorker>`, and its explicit type argument is emitted at the call site.
+The same feature works for arbitrary generic services and resolves the factory
+method's dependencies through the container.
+
+Generic factory type parameters must be inferable from the method's return type, and
+the factory method must be declared on a non-generic containing type. Generic
+constraints are checked before specialization; a closed type that does not satisfy
+them remains unresolved and follows the normal external-parameter behavior. An
+explicit registration for a closed service takes precedence over a generic factory.
+Specialization is compile-time and dependency-driven; it does not add arbitrary
+runtime `Resolve(Type)` handling for closed types absent from injected dependencies.
+
+On C# 14+, the static path also works:
+`Worker.Resolve(container, loggerFactory)` shares the container's cached logger,
+while `Worker.Resolve(null, loggerFactory)` constructs a fresh typed wrapper.
+
 ### Static Extensions (C# 14 / .NET 10+)
 
 When targeting C# 14 or later, FactoryGenerator automatically emits [static extension methods](https://learn.microsoft.com/en-us/dotnet/csharp/whats-new/csharp-14#extension-members) for every registered interface. This provides a dictionary-free, inline resolution path that the JIT can aggressively optimize.

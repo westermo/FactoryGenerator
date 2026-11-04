@@ -13,6 +13,7 @@
         <PackageReference Include="TUnit" />
         <PackageReference Include="Shouldly"/>
         <PackageReference Include="Microsoft.CodeAnalysis.CSharp"/>
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions"/>
     </ItemGroup>
 
     <ItemGroup>
