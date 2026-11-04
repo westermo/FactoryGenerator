@@ -126,7 +126,7 @@ namespace FactoryGenerator
             });
         }
 
-        private static IEnumerable<InjectionData> FindMethods(InjectionScanScope scope, CancellationToken token)
+        private static IEnumerable<DiscoveredInjection> FindMethods(InjectionScanScope scope, CancellationToken token)
         {
             foreach (var type in GetCandidateTypes(scope, token))
             {
@@ -142,7 +142,7 @@ namespace FactoryGenerator
                     var typeAttributes = type.GetAttributes().Concat(type.AllInterfaces.SelectMany(i => i.GetAttributes()))
                                              .ToImmutableArray();
                     var info = Injection.Create(type, typeAttributes, token);
-                    if (info is not null) yield return info;
+                    if (info is not null) yield return new DiscoveredInjection(type, info);
                 }
 
                 // Single pass over the member list instead of two separate GetMembers().OfType<>().Where()
@@ -177,8 +177,16 @@ namespace FactoryGenerator
                 {
                     foreach (var (method, attributes) in methodMatches)
                     {
+                        // Open generic factories are templates: they're specialized per closed type in
+                        // ExpandGenericFactories rather than registered as-is.
+                        if (Injection.IsOpenGenericMethod(method))
+                        {
+                            yield return new DiscoveredInjection(method, null);
+                            continue;
+                        }
+
                         var info = Injection.Create(method, attributes, token);
-                        if (info is not null) yield return info;
+                        if (info is not null) yield return new DiscoveredInjection(method, info);
                     }
                 }
 
@@ -187,7 +195,7 @@ namespace FactoryGenerator
                     foreach (var (property, attributes) in propertyMatches)
                     {
                         var info = Injection.Create(property, attributes, token);
-                        if (info is not null) yield return info;
+                        if (info is not null) yield return new DiscoveredInjection(property, info);
                     }
                 }
             }

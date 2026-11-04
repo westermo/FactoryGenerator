@@ -5,12 +5,353 @@ using FactoryGenerator;
 using FactoryGenerator.Attributes;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.Extensions.Logging;
 using Shouldly;
 
 namespace FactoryGenerator.Tests;
 
 public class GeneratorBehaviorTests
 {
+    [Test]
+    public void UnregisteredTypedLoggersRemainDistinctExternalConstructorDependencies()
+    {
+        const string source = """
+using FactoryGenerator.Attributes;
+using Microsoft.Extensions.Logging;
+
+namespace Sample
+{
+[Inject, Self]
+public sealed class Worker(ILogger<Worker> workerLogger);
+
+[Inject, Self]
+public sealed class OtherWorker(ILogger<OtherWorker> otherLogger);
+}
+""";
+
+        var (runResult, outputCompilation) = RunGenerator(CreateCompilation(source));
+        runResult.Results[0].Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray()
+            .ShouldBeEmpty();
+
+        var constructor = runResult.Results[0].GeneratedSources
+            .Single(result => result.HintName == "FactoryGenerator.DependencyInjectionContainer/Constructor.g.cs")
+            .SourceText.ToString();
+        constructor.ShouldContain("Microsoft.Extensions.Logging.ILogger<Sample.Worker> workerLogger");
+        constructor.ShouldContain("Microsoft.Extensions.Logging.ILogger<Sample.OtherWorker> otherLogger");
+    }
+
+    [Test]
+    public void ClosedTypedLoggerFactoriesSupportContainersScopesAndStaticResolution()
+    {
+        var assemblyName = "TypedLogging" + Guid.NewGuid().ToString("N");
+        var source = $$"""
+using System;
+using FactoryGenerator.Attributes;
+using Microsoft.Extensions.Logging;
+using {{assemblyName}}.Generated;
+
+namespace {{assemblyName}}
+{
+[Inject, Self]
+public sealed class Worker(ILogger<Worker> logger)
+{
+    public ILogger<Worker> Logger { get; } = logger;
+    public void Run() => Logger.LogInformation("working");
+}
+
+[Inject, Self]
+public sealed class OtherWorker(ILogger<OtherWorker> logger)
+{
+    public ILogger<OtherWorker> Logger { get; } = logger;
+    public void Run() => Logger.LogInformation("other");
+}
+
+[Inject, Self]
+public sealed class LoggingRegistrations
+{
+    [Inject, Singleton, ExceptAs<ILogger>]
+    public ILogger<Worker> WorkerLogger(ILoggerFactory loggerFactory)
+        => loggerFactory.CreateLogger<Worker>();
+
+    [Inject, Singleton, ExceptAs<ILogger>]
+    public ILogger<OtherWorker> OtherLogger(ILoggerFactory loggerFactory)
+        => loggerFactory.CreateLogger<OtherWorker>();
+}
+
+public static class StaticResolution
+{
+    public static Worker Create(ILoggerFactory loggerFactory)
+        => Worker.Resolve(null, loggerFactory);
+
+    public static Worker CreateCached(DependencyInjectionContainer container, ILoggerFactory loggerFactory)
+        => Worker.Resolve(container, loggerFactory);
+}
+}
+""";
+
+        var (runResult, outputCompilation) = RunGenerator(CreateCompilation(assemblyName, source));
+        runResult.Results[0].Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray()
+            .ShouldBeEmpty();
+
+        var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
+        var containerType = assembly.GetType($"{assemblyName}.Generated.DependencyInjectionContainer")!;
+        var workerType = assembly.GetType($"{assemblyName}.Worker")!;
+        var otherWorkerType = assembly.GetType($"{assemblyName}.OtherWorker")!;
+        var staticResolution = assembly.GetType($"{assemblyName}.StaticResolution")!;
+        var factory = new RecordingLoggerFactory();
+
+        containerType.GetConstructors()
+            .ShouldContain(ctor => ctor.GetParameters().Length == 1
+                && ctor.GetParameters()[0].ParameterType == typeof(ILoggerFactory));
+
+        using (var container = (IContainer)Activator.CreateInstance(containerType, factory)!)
+        {
+            container.Resolve<ILoggerFactory>().ShouldBeSameAs(factory);
+            container.IsRegistered(typeof(ILogger<>).MakeGenericType(workerType)).ShouldBeTrue();
+            container.IsRegistered(typeof(ILogger<>).MakeGenericType(otherWorkerType)).ShouldBeTrue();
+            container.IsRegistered<Microsoft.Extensions.Logging.ILogger>().ShouldBeFalse();
+
+            var worker = container.Resolve(workerType);
+            var otherWorker = container.Resolve(otherWorkerType);
+            var logger = workerType.GetProperty("Logger")!.GetValue(worker);
+            logger.ShouldBeOfType(typeof(Logger<>).MakeGenericType(workerType));
+            logger.ShouldBeSameAs(workerType.GetProperty("Logger")!.GetValue(container.Resolve(workerType)));
+            otherWorkerType.GetProperty("Logger")!.GetValue(otherWorker)
+                .ShouldBeOfType(typeof(Logger<>).MakeGenericType(otherWorkerType));
+            workerType.GetMethod("Run")!.Invoke(worker, null);
+            otherWorkerType.GetMethod("Run")!.Invoke(otherWorker, null);
+
+            using var scope = container.BeginLifetimeScope();
+            workerType.GetProperty("Logger")!.GetValue(scope.Resolve(workerType)).ShouldBeSameAs(logger);
+            var cached = staticResolution.GetMethod("CreateCached")!.Invoke(null, [container, factory]);
+            workerType.GetProperty("Logger")!.GetValue(cached).ShouldBeSameAs(logger);
+
+            var uncached = staticResolution.GetMethod("Create")!.Invoke(null, [factory]);
+            workerType.GetProperty("Logger")!.GetValue(uncached).ShouldNotBeSameAs(logger);
+            factory.Categories.ShouldBe([
+                $"{assemblyName}.Worker", $"{assemblyName}.OtherWorker", $"{assemblyName}.Worker"
+            ]);
+        }
+
+        factory.DisposeCount.ShouldBe(0);
+    }
+
+    [Test]
+    public void GenericFactoriesSpecializeTypedLoggerRegistrationsForClosedConstructorDependencies()
+    {
+        var assemblyName = "GenericTypedLogging" + Guid.NewGuid().ToString("N");
+        var source = $$"""
+using FactoryGenerator.Attributes;
+using Microsoft.Extensions.Logging;
+using {{assemblyName}}.Generated;
+
+namespace {{assemblyName}}
+{
+[Inject, Self]
+public sealed class Worker(ILogger<Worker> logger)
+{
+    public ILogger<Worker> Logger { get; } = logger;
+}
+
+[Inject, Self]
+public sealed class OtherWorker(ILogger<OtherWorker> logger)
+{
+    public ILogger<OtherWorker> Logger { get; } = logger;
+}
+
+[Inject, Self]
+public sealed class LoggingRegistrations
+{
+    [Inject, Singleton, ExceptAs<ILogger>]
+    public ILogger<TCategory> CreateLogger<TCategory>(ILoggerFactory loggerFactory)
+        => loggerFactory.CreateLogger<TCategory>();
+}
+
+public static class StaticResolution
+{
+    public static Worker Create(DependencyInjectionContainer container, ILoggerFactory loggerFactory)
+        => Worker.Resolve(container, loggerFactory);
+
+    public static Worker CreateUncached(ILoggerFactory loggerFactory)
+        => Worker.Resolve(null, loggerFactory);
+}
+}
+""";
+
+        var (runResult, outputCompilation) = RunGenerator(CreateCompilation(assemblyName, source));
+        runResult.Results[0].Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray()
+            .ShouldBeEmpty();
+
+        var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
+        var containerType = assembly.GetType($"{assemblyName}.Generated.DependencyInjectionContainer")!;
+        var workerType = assembly.GetType($"{assemblyName}.Worker")!;
+        var otherWorkerType = assembly.GetType($"{assemblyName}.OtherWorker")!;
+        var staticResolution = assembly.GetType($"{assemblyName}.StaticResolution")!;
+        var factory = new RecordingLoggerFactory();
+
+        using (var container = (IContainer)Activator.CreateInstance(containerType, factory)!)
+        {
+            container.IsRegistered(typeof(ILogger<>).MakeGenericType(workerType)).ShouldBeTrue();
+            container.IsRegistered(typeof(ILogger<>).MakeGenericType(otherWorkerType)).ShouldBeTrue();
+            container.IsRegistered<Microsoft.Extensions.Logging.ILogger>().ShouldBeFalse();
+
+            var worker = container.Resolve(workerType);
+            var logger = workerType.GetProperty("Logger")!.GetValue(worker);
+            logger.ShouldBeOfType(typeof(Logger<>).MakeGenericType(workerType));
+            logger.ShouldBeSameAs(workerType.GetProperty("Logger")!.GetValue(container.Resolve(workerType)));
+
+            var otherWorker = container.Resolve(otherWorkerType);
+            otherWorkerType.GetProperty("Logger")!.GetValue(otherWorker)
+                .ShouldBeOfType(typeof(Logger<>).MakeGenericType(otherWorkerType));
+
+            var staticWorker = staticResolution.GetMethod("Create")!.Invoke(null, [container, factory]);
+            workerType.GetProperty("Logger")!.GetValue(staticWorker).ShouldBeSameAs(logger);
+            var uncachedWorker = staticResolution.GetMethod("CreateUncached")!.Invoke(null, [factory]);
+            workerType.GetProperty("Logger")!.GetValue(uncachedWorker).ShouldNotBeSameAs(logger);
+
+            factory.Categories.ShouldBe([
+                $"{assemblyName}.Worker", $"{assemblyName}.OtherWorker", $"{assemblyName}.Worker"
+            ]);
+        }
+
+        factory.DisposeCount.ShouldBe(0);
+    }
+
+    [Test]
+    public void GenericFactoryMethodsCloseFromConstructorDependenciesAndHonorConstraints()
+    {
+        var assemblyName = "GenericFactory" + Guid.NewGuid().ToString("N");
+        var source = $$"""
+using FactoryGenerator.Attributes;
+using {{assemblyName}}.Generated;
+
+namespace {{assemblyName}}
+{
+public interface IDependency
+{
+}
+
+[Inject, Singleton, Self]
+public sealed class Dependency : IDependency
+{
+}
+
+public interface ITypedInterface<T>
+{
+    IDependency Dependency { get; }
+}
+
+public sealed class TypedImplementation<T>(IDependency dependency) : ITypedInterface<T>
+{
+    public IDependency Dependency { get; } = dependency;
+}
+
+public sealed class Alpha
+{
+}
+
+public sealed class Beta
+{
+}
+
+[Inject, Self]
+public sealed class GenericFactory
+{
+    [Inject, Singleton]
+    public ITypedInterface<T> TypedFactoryMethod<T>(IDependency dependency)
+        where T : class, new()
+        => new TypedImplementation<T>(dependency);
+}
+
+[Inject, Self]
+public sealed class Consumer(ITypedInterface<Alpha> alpha, ITypedInterface<Beta> beta)
+{
+    public ITypedInterface<Alpha> Alpha { get; } = alpha;
+    public ITypedInterface<Beta> Beta { get; } = beta;
+}
+
+[Inject, Self]
+public sealed class StringConsumer(ITypedInterface<string> typed)
+{
+}
+
+public static class StaticResolution
+{
+    public static Consumer Create(DependencyInjectionContainer container)
+        => Consumer.Resolve(container);
+}
+}
+""";
+
+        var (runResult, outputCompilation) = RunGenerator(CreateCompilation(assemblyName, source));
+        runResult.Results[0].Exception.ShouldBeNull();
+        outputCompilation.GetDiagnostics()
+            .Where(diagnostic => diagnostic.Severity == DiagnosticSeverity.Error)
+            .ToArray()
+            .ShouldBeEmpty();
+
+        var generated = string.Join(
+            Environment.NewLine,
+            runResult.Results[0].GeneratedSources.Select(result => result.SourceText.ToString()));
+        generated.ShouldContain("TypedFactoryMethod<" + assemblyName + ".Alpha>");
+        generated.ShouldContain("TypedFactoryMethod<" + assemblyName + ".Beta>");
+        generated.ShouldContain(assemblyName + ".ITypedInterface<string> typed");
+
+        var assembly = System.Reflection.Assembly.Load(EmitAssembly(outputCompilation));
+        var containerType = assembly.GetType($"{assemblyName}.Generated.DependencyInjectionContainer")!;
+        var consumerType = assembly.GetType($"{assemblyName}.Consumer")!;
+        var staticResolution = assembly.GetType($"{assemblyName}.StaticResolution")!;
+        var dependencyType = assembly.GetType($"{assemblyName}.Dependency")!;
+        var typedInterfaceType = assembly.GetType($"{assemblyName}.ITypedInterface`1")!;
+        var typedStringType = typedInterfaceType.MakeGenericType(typeof(string));
+        var typedStringImplementationType = assembly.GetType($"{assemblyName}.TypedImplementation`1")!
+            .MakeGenericType(typeof(string));
+        var typedString = Activator.CreateInstance(
+            typedStringImplementationType,
+            Activator.CreateInstance(dependencyType))!;
+        var containerConstructor = containerType.GetConstructors()
+            .Single(constructor => constructor.GetParameters().Any(parameter => parameter.ParameterType == typedStringType));
+        using var container = (IContainer)containerConstructor.Invoke([typedString]);
+
+        var dependency = container.Resolve(assembly.GetType($"{assemblyName}.IDependency")!);
+        var consumer = container.Resolve(consumerType);
+        var alpha = consumerType.GetProperty("Alpha")!.GetValue(consumer)!;
+        var beta = consumerType.GetProperty("Beta")!.GetValue(consumer)!;
+        alpha.GetType().GetProperty("Dependency")!.GetValue(alpha).ShouldBeSameAs(dependency);
+        beta.GetType().GetProperty("Dependency")!.GetValue(beta).ShouldBeSameAs(dependency);
+        alpha.ShouldBeSameAs(consumerType.GetProperty("Alpha")!.GetValue(container.Resolve(consumerType)));
+        beta.ShouldBeSameAs(consumerType.GetProperty("Beta")!.GetValue(container.Resolve(consumerType)));
+        alpha.ShouldNotBeSameAs(beta);
+
+        var staticConsumer = staticResolution.GetMethod("Create")!.Invoke(null, [container]);
+        consumerType.GetProperty("Alpha")!.GetValue(staticConsumer).ShouldBeSameAs(alpha);
+        consumerType.GetProperty("Beta")!.GetValue(staticConsumer).ShouldBeSameAs(beta);
+    }
+
+    private sealed class RecordingLoggerFactory : ILoggerFactory
+    {
+        public System.Collections.Generic.List<string> Categories { get; } = [];
+        public int DisposeCount { get; private set; }
+
+        public Microsoft.Extensions.Logging.ILogger CreateLogger(string categoryName)
+        {
+            Categories.Add(categoryName);
+            return Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
+        }
+
+        public void AddProvider(ILoggerProvider provider) => throw new NotSupportedException();
+        public void Dispose() => DisposeCount++;
+    }
+
     [Test]
     public void GeneratorRejectsMultipleExternalValuesOfSameType()
     {

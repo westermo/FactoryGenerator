@@ -87,7 +87,7 @@ namespace FactoryGenerator
                 HashSet<ParameterData>? lambdaMissing = null;
                 HashSet<ParameterData>? lambdaNullableDefaults = null;
                 AnalyzeParameters(lambda.MethodParameters, availableInterfaceFullNames, ref lambdaMissing, ref lambdaNullableDefaults);
-                var lambdaCreation = $"{lambda.ContainingTypeMemberName}.{lambda.MemberName}{MakeMethodCall(lambda.MethodParameters, lambdaMissing, lambdaNullableDefaults)}";
+                var lambdaCreation = $"{lambda.ContainingTypeMemberName}.{GetLambdaMethodName(lambda)}{MakeMethodCall(lambda.MethodParameters, lambdaMissing, lambdaNullableDefaults)}";
                 return new InjectionResolution(lambdaCreation, (IEnumerable<ParameterData>?) lambdaMissing ?? Enumerable.Empty<ParameterData>(), null);
             }
 

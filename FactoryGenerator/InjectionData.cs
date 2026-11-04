@@ -151,16 +151,19 @@ namespace FactoryGenerator
         public string ContainingTypeMemberName { get; }  // SymbolUtility.MemberName(containingType) WITH "()"
         public string MemberName { get; }                // method or property name
         public ImmutableArray<ParameterData> MethodParameters { get; }  // empty for property
+        public ImmutableArray<string> GenericTypeArguments { get; }
 
         public LambdaData(
             bool isMethod, string containingTypeFullName, string containingTypeMemberName,
-            string memberName, ImmutableArray<ParameterData> methodParameters)
+            string memberName, ImmutableArray<ParameterData> methodParameters,
+            ImmutableArray<string> genericTypeArguments)
         {
             IsMethod = isMethod;
             ContainingTypeFullName = containingTypeFullName;
             ContainingTypeMemberName = containingTypeMemberName;
             MemberName = memberName;
             MethodParameters = methodParameters;
+            GenericTypeArguments = genericTypeArguments;
         }
 
         public bool Equals(LambdaData? other)
@@ -171,7 +174,8 @@ namespace FactoryGenerator
                 && ContainingTypeFullName == other.ContainingTypeFullName
                 && ContainingTypeMemberName == other.ContainingTypeMemberName
                 && MemberName == other.MemberName
-                && MethodParameters.SequenceEqual(other.MethodParameters);
+                && MethodParameters.SequenceEqual(other.MethodParameters)
+                && GenericTypeArguments.SequenceEqual(other.GenericTypeArguments);
         }
 
         public override bool Equals(object? obj) => obj is LambdaData other && Equals(other);
