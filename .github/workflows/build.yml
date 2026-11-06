@@ -100,7 +100,7 @@ jobs:
         uses: Nuget/login@v1
         id: login
         with:
-            user: Westermo
+            user: ${{ secrets.NUGET_USER }}
       - name: Publish Nuget packages
         run: |
           for file in $(find "${{ env.NuGetDirectory }}" -type f -name "*.nupkg"); do
