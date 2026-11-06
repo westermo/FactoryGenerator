@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793974558982,
+  "lastUpdate": 1793974560757,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -1928,6 +1928,102 @@ window.BENCHMARK_DATA = {
             "value": 500133.8670372596,
             "unit": "ns",
             "range": "± 2876.548866970913"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "f36b0b8320b8baaa51ee0e28bf1b3691bd186c1f",
+          "message": "Update NuGet package publishing with login step",
+          "timestamp": "2026-11-06T15:02:49+01:00",
+          "tree_id": "e09d9b8db8973d2eb7aae5170205a2063154057c",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/f36b0b8320b8baaa51ee0e28bf1b3691bd186c1f"
+        },
+        "date": 1793974560739,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph",
+            "value": 9150635.9375,
+            "unit": "ns",
+            "range": "± 75802.49258137713"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ConstructorGraph_StaticExtensionsEnabled",
+            "value": 13628741.65625,
+            "unit": "ns",
+            "range": "± 135641.37359383577"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_NoiseHeavyProject",
+            "value": 3260225.208854167,
+            "unit": "ns",
+            "range": "± 441123.6851861581"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsDisabled",
+            "value": 590858.6635416667,
+            "unit": "ns",
+            "range": "± 98176.71497390441"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_FeatureRichGraph_StaticExtensionsEnabled",
+            "value": 710550.1975911459,
+            "unit": "ns",
+            "range": "± 116268.5375833958"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_MultiAssemblyOverrideGraph",
+            "value": 5379929.478125,
+            "unit": "ns",
+            "range": "± 28964.352956164614"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Cold_ManyAssembliesGraph",
+            "value": 1840519.9161458334,
+            "unit": "ns",
+            "range": "± 23059.482850173357"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_NoOpRerun",
+            "value": 54730.800248579544,
+            "unit": "ns",
+            "range": "± 744.4399724081279"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_UnrelatedEdit",
+            "value": 512667.66354166664,
+            "unit": "ns",
+            "range": "± 9034.864159953557"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_InjectedSignatureEdit",
+            "value": 828515.7770833333,
+            "unit": "ns",
+            "range": "± 133596.705249677"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_AddInjection",
+            "value": 916448.6146763393,
+            "unit": "ns",
+            "range": "± 8442.686212607796"
+          },
+          {
+            "name": "Benchmarks.GeneratorBenchmarks.Incremental_ReferenceAssemblyChange",
+            "value": 775424.2345252404,
+            "unit": "ns",
+            "range": "± 4324.4707351150755"
           }
         ]
       }
