@@ -1,5 +1,5 @@
 window.BENCHMARK_DATA = {
-  "lastUpdate": 1793974560757,
+  "lastUpdate": 1793975291958,
   "repoUrl": "https://github.com/westermo/FactoryGenerator",
   "entries": {
     "Benchmark.Net Benchmark": [
@@ -1488,6 +1488,132 @@ window.BENCHMARK_DATA = {
             "value": 104.12673820101696,
             "unit": "ns",
             "range": "± 2.7162549824068996"
+          }
+        ]
+      },
+      {
+        "commit": {
+          "author": {
+            "email": "142813963+carl-andersson-at-westermo@users.noreply.github.com",
+            "name": "Caran",
+            "username": "carl-andersson-at-westermo"
+          },
+          "committer": {
+            "email": "noreply@github.com",
+            "name": "GitHub",
+            "username": "web-flow"
+          },
+          "distinct": true,
+          "id": "3c95b0f9f955fd73bd08fd6fc0b4ea4ffb77c6ee",
+          "message": "Use secret for NuGet user in build workflow",
+          "timestamp": "2026-11-06T15:15:29+01:00",
+          "tree_id": "3133ed7c3b37d36650ded9ab81296e9c27fe4878",
+          "url": "https://github.com/westermo/FactoryGenerator/commit/3c95b0f9f955fd73bd08fd6fc0b4ea4ffb77c6ee"
+        },
+        "date": 1793975291085,
+        "tool": "benchmarkdotnet",
+        "benches": [
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveChain",
+            "value": 108.67174669674465,
+            "unit": "ns",
+            "range": "± 1.0668394937205268"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScoped",
+            "value": 9.356210701167583,
+            "unit": "ns",
+            "range": "± 0.03585566521857545"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingleton",
+            "value": 10.17082709751346,
+            "unit": "ns",
+            "range": "± 0.012531594423029872"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveTransient",
+            "value": 12.556201189756393,
+            "unit": "ns",
+            "range": "± 0.08561180339743844"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveArray",
+            "value": 15.138352436323961,
+            "unit": "ns",
+            "range": "± 0.021947410054158213"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.Create",
+            "value": 7133.975872920109,
+            "unit": "ns",
+            "range": "± 109.43808310257835"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateFromSelf",
+            "value": 7052.977666727702,
+            "unit": "ns",
+            "range": "± 106.90113865478725"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.CreateLifetimeScope",
+            "value": 7653.859366353353,
+            "unit": "ns",
+            "range": "± 116.30002433546092"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveSingletonThroughScope",
+            "value": 22.299275159835815,
+            "unit": "ns",
+            "range": "± 0.019631827372741537"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ResolveScopedThroughScope",
+            "value": 20.05214154261809,
+            "unit": "ns",
+            "range": "± 0.05825562843262968"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveSingleton",
+            "value": 10.642104151844979,
+            "unit": "ns",
+            "range": "± 0.5940209964892059"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveSingletonNullContainer",
+            "value": 15.115788939595223,
+            "unit": "ns",
+            "range": "± 0.13492202662451475"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveTransient",
+            "value": 15.079737303654353,
+            "unit": "ns",
+            "range": "± 0.2361809097255787"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveChain",
+            "value": 101.60080142231548,
+            "unit": "ns",
+            "range": "± 2.0616284582950493"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveChainNullContainer",
+            "value": 99.77471977949142,
+            "unit": "ns",
+            "range": "± 2.902896256553027"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveWithCollection",
+            "value": 96.13693350553513,
+            "unit": "ns",
+            "range": "± 1.1503102179534415"
+          },
+          {
+            "name": "Benchmarks.ResolveBenchmarks.ExtensionResolveWithCollectionNullContainer",
+            "value": 98.50278118077446,
+            "unit": "ns",
+            "range": "± 1.968380406533961"
           }
         ]
       }
