@@ -85,6 +85,8 @@ jobs:
     if: github.event_name == 'release'
     runs-on: ubuntu-latest
     needs: [ pack ]
+    permissions: 
+      id-token: write
     steps:
       - uses: actions/download-artifact@v4
         with:
@@ -94,8 +96,13 @@ jobs:
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: "10.0.x"
+      - name: Nuget Login
+        uses: Nuget/login@v1
+        id: login
+        with:
+            user: Westermo
       - name: Publish Nuget packages
         run: |
           for file in $(find "${{ env.NuGetDirectory }}" -type f -name "*.nupkg"); do
-            dotnet nuget push "$file" --api-key "${{ secrets.NUGET_APIKEY }}" --source https://api.nuget.org/v3/index.json --skip-duplicate || exit 1
+            dotnet nuget push "$file" --api-key "${{steps.login.outputs.NUGET_API_KEY}}" --source https://api.nuget.org/v3/index.json --skip-duplicate || exit 1
           done
